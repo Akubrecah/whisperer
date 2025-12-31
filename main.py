@@ -53,7 +53,10 @@ class RecordingOverlay(Gtk.Window):
         self.set_default_size(400, 600)
         self.add_css_class("overlay-window-transparent")
         
+        # This is critical for true transparency in some GTK environments
+        # We ensure the window itself has no background
         self.main_layout = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        self.main_layout.add_css_class("overlay-window-transparent")
         self.main_layout.set_valign(Gtk.Align.END)
         self.main_layout.set_halign(Gtk.Align.CENTER)
         self.main_layout.set_margin_bottom(20)
@@ -292,7 +295,30 @@ class DictatorApp(Adw.Application):
         except Exception as e:
             print(f"DEBUG: Unexpected clipboard error: {e}")
 
-# Settings Handlers
+
+class DictatorWindow(Adw.ApplicationWindow):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.app = kwargs["application"]
+        
+        self.set_title("Dictator")
+        self.set_default_size(800, 600)
+        self.add_css_class("futuristic-window")
+
+        # State
+        self.recording = False
+        self.audio_queue = queue.Queue()
+        self.model = None
+        self.current_transcript = ""
+        self.keyboard_controller = keyboard.Controller()
+        self.overlay = None
+        
+        self.setup_ui()
+        self.refresh_history_ui()
+        self.apply_css()
+        self.update_hotkey()
+
+    # Settings Handlers
     def on_hotkey_changed(self, row):
         new_key = row.get_text().lower()
         if new_key:
@@ -301,7 +327,7 @@ class DictatorApp(Adw.Application):
             self.update_hotkey()
 
     def on_color_set(self, btn):
-        rgba = btn.get_rgba()
+        rgba = btn.rgba
         hex_color = "#{:02x}{:02x}{:02x}".format(
             int(rgba.red * 255), int(rgba.green * 255), int(rgba.blue * 255)
         )
@@ -341,67 +367,16 @@ class DictatorApp(Adw.Application):
         try:
             file = dialog.open_finish(result)
             if file:
-                self.app.settings["overlay_image"] = file.get_path()
-                self.app.save_settings()
-                self.overlay = None # Force recreation
-        except: pass
-
-    def on_overlay_pick_clicked(self, btn):
-        print("DEBUG: Overlay pick clicked")
-        dialog = Gtk.FileDialog(title="Select Recording Overlay (GIF/Image)")
-        
-        # Add file filters
-        filters = Gio.ListStore.new(Gtk.FileFilter)
-        
-        f_images = Gtk.FileFilter()
-        f_images.set_name("Image files")
-        f_images.add_mime_type("image/gif")
-        f_images.add_mime_type("image/png")
-        f_images.add_mime_type("image/jpeg")
-        filters.append(f_images)
-        
-        dialog.set_filters(filters)
-        dialog.open(self, None, self.on_overlay_file_selected)
-
-    def on_overlay_file_selected(self, dialog, result):
-        try:
-            file = dialog.open_finish(result)
-            if file:
                 path = file.get_path()
-                print(f"DEBUG: File selected: {path}")
                 self.app.settings["overlay_image"] = path
                 self.app.save_settings()
-                
-                # IMPORTANT: Update the live overlay if it exists
-                if hasattr(self.parent, 'overlay') and self.parent.overlay:
-                    print("DEBUG: Updating active overlay instance image")
-                    self.parent.overlay.load_image(path)
+                if self.overlay:
+                    self.overlay.close_overlay() # This is a custom method in RecordingOverlay
+                    self.overlay = None
             else:
                 print("DEBUG: Selection cancelled")
         except Exception as e:
-            print(f"DEBUG: File selection error: {e}")
-
-class DictatorWindow(Adw.ApplicationWindow):
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        self.app = kwargs["application"]
-        
-        self.set_title("Dictator")
-        self.set_default_size(800, 600)
-        self.add_css_class("futuristic-window")
-
-        # State
-        self.recording = False
-        self.audio_queue = queue.Queue()
-        self.model = None
-        self.current_transcript = ""
-        self.keyboard_controller = keyboard.Controller()
-        self.overlay = None
-        
-        self.setup_ui()
-        self.refresh_history_ui()
-        self.apply_css()
-        self.update_hotkey()
+            print(f"DEBUG: Error selecting overlay: {e}")
 
     def apply_css(self):
         css_provider = Gtk.CssProvider()
@@ -416,15 +391,20 @@ class DictatorWindow(Adw.ApplicationWindow):
         except: pass
 
     def setup_ui(self):
+        # Use a main box to hold the header and the content
+        main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        self.set_content(main_box)
+
         # Header with navigation
         header = Adw.HeaderBar()
-        self.set_titlebar(header)
+        main_box.append(header)
         
-        view_stack = Adw.ViewStack()
-        self.set_content(view_stack)
+        self.view_stack = Adw.ViewStack()
+        self.view_stack.set_vexpand(True)
+        main_box.append(self.view_stack)
 
         view_switcher = Adw.ViewSwitcher()
-        view_switcher.set_stack(view_stack)
+        view_switcher.set_stack(self.view_stack)
         header.set_title_widget(view_switcher)
 
         # 1. DASHBOARD PAGE
@@ -434,7 +414,7 @@ class DictatorWindow(Adw.ApplicationWindow):
         self.dashboard_box.set_margin_start(30)
         self.dashboard_box.set_margin_end(30)
         
-        dashboard_page = view_stack.add_titled_with_icon(self.dashboard_box, "dashboard", "Dashboard", "app-dashboard-symbolic")
+        dashboard_page = self.view_stack.add_titled_with_icon(self.dashboard_box, "dashboard", "Dashboard", "app-dashboard-symbolic")
         
         # Left Column: Orb and Text
         left_col = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=20)
@@ -460,9 +440,41 @@ class DictatorWindow(Adw.ApplicationWindow):
         right_col.append(dash_clip_scroll)
         self.dashboard_box.append(right_col)
 
+        # Populate Left Column (Orb and Text area)
+        self.orb_btn = Gtk.Button()
+        self.orb_btn.add_css_class("record-orb")
+        self.orb_btn.set_halign(Gtk.Align.CENTER)
+        self.orb_btn.connect("clicked", self.on_record_toggled)
+        
+        orbital_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        orbital_box.add_css_class("orbital-container")
+        orbital_box.set_halign(Gtk.Align.CENTER)
+        orbital_box.set_valign(Gtk.Align.CENTER)
+        left_col.append(orbital_box)
+
+        overlay = Gtk.Overlay()
+        overlay.set_child(self.orb_btn)
+        self.orb_label = Gtk.Label(label="READY")
+        self.orb_label.add_css_class("status-caption")
+        overlay.add_overlay(self.orb_label)
+        orbital_box.append(overlay)
+
+        scrolled = Gtk.ScrolledWindow()
+        scrolled.set_vexpand(True)
+        scrolled.add_css_class("glass-view")
+        self.text_view = Gtk.TextView()
+        self.text_view.set_editable(False)
+        self.text_view.set_wrap_mode(Gtk.WrapMode.WORD)
+        scrolled.set_child(self.text_view)
+        left_col.append(scrolled)
+
+        self.status_label = Gtk.Label(label="Initializing neural systems...")
+        self.status_label.add_css_class("caption")
+        left_col.append(self.status_label)
+
         # 2. SETTINGS PAGE
         settings_page = Adw.PreferencesPage()
-        view_stack.add_titled_with_icon(settings_page, "settings", "Settings", "emblem-system-symbolic")
+        self.view_stack.add_titled_with_icon(settings_page, "settings", "Settings", "emblem-system-symbolic")
         
         core_group = Adw.PreferencesGroup(title="Dictator Core")
         settings_page.add(core_group)
@@ -477,7 +489,7 @@ class DictatorWindow(Adw.ApplicationWindow):
         self.color_btn = Gtk.ColorButton()
         rgba = Gdk.RGBA()
         rgba.parse(self.app.settings["accent_color"])
-        self.color_btn.set_rgba(rgba)
+        self.color_btn.rgba = rgba
         self.color_btn.connect("color-set", self.on_color_set)
         color_row.add_suffix(self.color_btn)
         core_group.add(color_row)
@@ -530,63 +542,6 @@ class DictatorWindow(Adw.ApplicationWindow):
         # We'll use the switcher in dashboard or somewhere else if needed, but for now 
         # let's keep the popover simple for transcripts.
 
-        # Left Column: Orb and Text
-        left_col = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=20)
-        left_col.set_hexpand(True)
-        main_box.append(left_col)
-
-        # Right Column: Dashboard Clipboards
-        right_col = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
-        right_col.set_size_request(280, -1)
-        right_col.add_css_class("glass-view")
-        right_col.set_margin_start(10)
-        
-        clip_label = Gtk.Label(label="📋 RECENT CLIPBOARDS")
-        clip_label.add_css_class("caption")
-        clip_label.set_margin_top(10)
-        right_col.append(clip_label)
-
-        self.dashboard_clipboard_list = Gtk.ListBox()
-        self.dashboard_clipboard_list.set_selection_mode(Gtk.SelectionMode.NONE)
-        dash_clip_scroll = Gtk.ScrolledWindow()
-        dash_clip_scroll.set_vexpand(True)
-        dash_clip_scroll.set_child(self.dashboard_clipboard_list)
-        right_col.append(dash_clip_scroll)
-        main_box.append(right_col)
-
-        # Visual Orb
-        self.orb_btn = Gtk.Button()
-        self.orb_btn.add_css_class("record-orb")
-        self.orb_btn.set_halign(Gtk.Align.CENTER)
-        self.orb_btn.connect("clicked", self.on_record_toggled)
-        
-        # Orbital Wrap (Shlumzi style)
-        orbital_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
-        orbital_box.add_css_class("orbital-container")
-        orbital_box.set_halign(Gtk.Align.CENTER)
-        orbital_box.set_valign(Gtk.Align.CENTER)
-        left_col.append(orbital_box)
-
-        overlay = Gtk.Overlay()
-        overlay.set_child(self.orb_btn)
-        self.orb_label = Gtk.Label(label="READY")
-        self.orb_label.add_css_class("status-caption")
-        overlay.add_overlay(self.orb_label)
-        orbital_box.append(overlay)
-
-        # Text area
-        scrolled = Gtk.ScrolledWindow()
-        scrolled.set_vexpand(True)
-        scrolled.add_css_class("glass-view")
-        self.text_view = Gtk.TextView()
-        self.text_view.set_editable(False)
-        self.text_view.set_wrap_mode(Gtk.WrapMode.WORD)
-        scrolled.set_child(self.text_view)
-        left_col.append(scrolled)
-
-        self.status_label = Gtk.Label(label="Initializing neural systems...")
-        self.status_label.add_css_class("caption")
-        left_col.append(self.status_label)
 
     def refresh_history_ui(self):
         # Refresh transcripts
@@ -623,14 +578,14 @@ class DictatorWindow(Adw.ApplicationWindow):
                 source.connect("prepare", self.on_drag_prepare, "history", i)
                 row.add_controller(source)
                 
-                target = Gtk.DropTarget.new(Gdk.TYPE_INT, Gdk.DragAction.MOVE)
+                target = Gtk.DropTarget.new(GObject.TYPE_INT, Gdk.DragAction.MOVE)
                 target.connect("drop", self.on_drop_row, "history", i)
                 row.add_controller(target)
                 
                 self.history_list.append(row)
 
         # Refresh clipboards
-        for lb_name, lb in [("clipboard_popover", self.clipboard_list), ("dashboard", self.dashboard_clipboard_list)]:
+        for lb in [self.dashboard_clipboard_list]:
             while (child := lb.get_first_child()): lb.remove(child)
             if not self.app.clipboards:
                 lb.append(Gtk.Label(label="Clipboard history is empty"))
@@ -659,7 +614,7 @@ class DictatorWindow(Adw.ApplicationWindow):
                     source.connect("prepare", self.on_drag_prepare, "clipboard", i)
                     row.add_controller(source)
                     
-                    dt = Gtk.DropTarget.new(Gdk.TYPE_INT, Gdk.DragAction.MOVE)
+                    dt = Gtk.DropTarget.new(GObject.TYPE_INT, Gdk.DragAction.MOVE)
                     dt.connect("drop", self.on_drop_row, "clipboard", i)
                     row.add_controller(dt)
                     
@@ -699,8 +654,8 @@ class DictatorWindow(Adw.ApplicationWindow):
         self.history_popover.popdown()
 
     def on_preferences_clicked(self, btn):
-        prefs = PreferencesWindow(self)
-        prefs.present()
+        # Switch to settings tab
+        self.view_stack.set_visible_child_name("settings")
 
     def update_hotkey(self):
         if hasattr(self, 'listener'): self.listener.stop()

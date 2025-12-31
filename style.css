@@ -56,7 +56,6 @@
 
 .glass-view {
     background: var(--glass-bg);
-    backdrop-filter: blur(15px);
     border-radius: 16px;
     border: 1px solid var(--panel-border);
     padding: 20px;
@@ -79,6 +78,8 @@ headerbar {
 }
 
 .recording-gif-glow {
+    background: transparent;
+    background-color: transparent;
     filter: brightness(0) invert(1) sepia(100%) saturate(10000%) hue-rotate(5deg) drop-shadow(0 0 20px var(--neon-accent));
     animation: pulsing-shlumzi 2.5s infinite ease-in-out;
 }
@@ -106,5 +107,18 @@ row {
 
 row:hover {
     background: rgba(255, 124, 0, 0.1);
+}
+
+/* Floating Overlay Fixes */
+window.overlay-window-transparent,
+window.overlay-window-transparent > box,
+.overlay-window-transparent,
+.recording-overlay-content {
+    background: transparent;
+    background-color: transparent;
+    background-image: none;
+    border: none;
+    box-shadow: none;
+    outline: none;
 }
 
