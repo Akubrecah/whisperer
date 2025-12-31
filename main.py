@@ -186,7 +186,13 @@ class DictatorApp(Adw.Application):
         if not text or (self.history and self.history[0] == text):
             return
         self.history.insert(0, text)
+        if len(self.history) > 10:
+            self.history = self.history[:10]
         self.save_history()
+        
+        # Trigger UI refresh if active
+        if hasattr(self, 'window') and self.window:
+            GLib.idle_add(self.window.refresh_history_ui)
 
     def load_clipboards(self):
         if os.path.exists(CLIPBOARD_FILE):
@@ -206,8 +212,10 @@ class DictatorApp(Adw.Application):
         if not text or (self.clipboards and self.clipboards[0] == text):
             return
         self.clipboards.insert(0, text)
+        if len(self.clipboards) > 10:
+            self.clipboards = self.clipboards[:10]
         self.save_clipboards()
-        if hasattr(self, 'window'):
+        if hasattr(self, 'window') and self.window:
             GLib.idle_add(self.window.refresh_history_ui)
 
     def start_clipboard_monitor(self):
@@ -231,9 +239,15 @@ class DictatorApp(Adw.Application):
         return False
 
     def on_clipboard_read_finished(self, clipboard, result):
-        text = clipboard.read_text_finish(result)
-        if text:
-            self.add_to_clipboards(text)
+        try:
+            text = clipboard.read_text_finish(result)
+            if text:
+                self.add_to_clipboards(text)
+        except GLib.Error:
+            # Silence error when clipboard doesn't contain plain text (e.g. image, file)
+            pass
+        except Exception as e:
+            print(f"DEBUG: Unexpected clipboard error: {e}")
 
 class PreferencesWindow(Adw.PreferencesWindow):
     def __init__(self, parent):
@@ -359,6 +373,7 @@ class DictatorWindow(Adw.ApplicationWindow):
         self.overlay = None
         
         self.setup_ui()
+        self.refresh_history_ui()
         self.apply_css()
         self.update_hotkey()
 
