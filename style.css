@@ -59,15 +59,24 @@ headerbar {
     border-bottom: 1px solid rgba(255, 255, 255, 0.05);
 }
 
-.recording-overlay {
-    background: rgba(0, 0, 0, 0.7);
-    border: 3px solid var(--neon-accent);
-    border-radius: 24px;
-    box-shadow: 0 0 40px var(--neon-accent);
+.overlay-window-transparent {
+    background: transparent;
+}
+
+.recording-overlay-content {
+    background: transparent;
+    border: none;
+    border-radius: 0;
+    padding: 0;
+    box-shadow: none;
+}
+
+.overlay-status-text {
+    opacity: 0; /* Hidden as per user request for only the gif */
 }
 
 .overlay-emoji {
-    font-size: 80px;
-    padding: 30px;
+    font-size: 100px;
+    padding: 20px;
 }
 
