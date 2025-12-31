@@ -58,3 +58,16 @@ headerbar {
     background: transparent;
     border-bottom: 1px solid rgba(255, 255, 255, 0.05);
 }
+
+.recording-overlay {
+    background: rgba(0, 0, 0, 0.7);
+    border: 3px solid var(--neon-accent);
+    border-radius: 24px;
+    box-shadow: 0 0 40px var(--neon-accent);
+}
+
+.overlay-emoji {
+    font-size: 80px;
+    padding: 30px;
+}
+
