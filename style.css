@@ -81,13 +81,14 @@ headerbar {
 }
 
 .recording-gif-glow {
-    filter: drop-shadow(0 0 15px var(--neon-accent));
-    animation: pulsing-glow 2s infinite ease-in-out;
+    /* brightness(0) invert(1) turns any colored image into solid white */
+    filter: brightness(0) invert(1) drop-shadow(0 0 15px #ff003c);
+    animation: pulsing-glow-red 2s infinite ease-in-out;
 }
 
-@keyframes pulsing-glow {
-    0% { filter: drop-shadow(0 0 10px var(--neon-accent)); transform: scale(1); }
-    50% { filter: drop-shadow(0 0 25px var(--neon-accent)); transform: scale(1.02); }
-    100% { filter: drop-shadow(0 0 10px var(--neon-accent)); transform: scale(1); }
+@keyframes pulsing-glow-red {
+    0% { filter: brightness(0) invert(1) drop-shadow(0 0 10px #ff003c); transform: scale(1); }
+    50% { filter: brightness(0) invert(1) drop-shadow(0 0 25px #ff003c); transform: scale(1.02); }
+    100% { filter: brightness(0) invert(1) drop-shadow(0 0 10px #ff003c); transform: scale(1); }
 }
 
