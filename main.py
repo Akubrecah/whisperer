@@ -54,27 +54,31 @@ class RecordingOverlay(Gtk.Window):
         # Get monitor geometry for placement
         display = Gdk.Display.get_default()
         monitors = display.get_monitors()
+        # Get monitor geometry to span the whole screen
+        display = Gdk.Display.get_default()
+        monitors = display.get_monitors()
         if monitors.get_n_items() > 0:
             monitor = monitors.get_item(0)
             geometry = monitor.get_geometry()
-            # Set window to cover full width and height to ensure bottom-center placement is possible
             self.set_default_size(geometry.width, geometry.height)
         else:
-            self.set_default_size(800, 1000)
+            self.set_default_size(1920, 1080)
 
         self.add_css_class("overlay-window-transparent")
         
-        # This is critical for true transparency in some GTK environments
-        # We ensure the window itself has no background
+        # Main layout spans the whole screen
         self.main_layout = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         self.main_layout.add_css_class("overlay-window-transparent")
-        self.main_layout.set_valign(Gtk.Align.END)
-        self.main_layout.set_halign(Gtk.Align.CENTER)
-        self.main_layout.set_margin_bottom(20)
+        self.main_layout.set_hexpand(True)
+        self.main_layout.set_vexpand(True)
         self.set_child(self.main_layout)
         
+        # Content box pushed to bottom-center
         self.content_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         self.content_box.add_css_class("recording-overlay-content")
+        self.content_box.set_valign(Gtk.Align.END)
+        self.content_box.set_halign(Gtk.Align.CENTER)
+        self.content_box.set_margin_bottom(50) # Buffer from taskbar
         self.main_layout.append(self.content_box)
         
         self.img = Gtk.Image()
