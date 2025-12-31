@@ -11,7 +11,7 @@ import gi
 # Ensure we use GTK4 and LibAdwaita
 gi.require_version('Gtk', '4.0')
 gi.require_version('Adw', '1')
-from gi.repository import Gtk, Adw, GLib, Gio, Gdk, GdkPixbuf
+from gi.repository import Gtk, Adw, GLib, Gio, Gdk, GdkPixbuf, GObject
 
 # For Global Hotkey and Auto-Paste
 from pynput import keyboard
@@ -135,9 +135,10 @@ class DictatorApp(Adw.Application):
         self.clipboards = self.load_clipboards()
 
     def do_startup(self):
-        # Startup logic goes here
         Adw.Application.do_startup(self)
         print("DEBUG: Application started (do_startup)")
+        # Prune history every 5 minutes
+        GLib.timeout_add_seconds(300, self.prune_history)
 
     def do_activate(self):
         print("DEBUG: Application activating (do_activate)")
@@ -172,7 +173,11 @@ class DictatorApp(Adw.Application):
         if os.path.exists(HISTORY_FILE):
             try:
                 with open(HISTORY_FILE, 'r') as f:
-                    return json.load(f)
+                    data = json.load(f)
+                    # Migration: convert string list to object list
+                    if data and isinstance(data[0], str):
+                        return [{"text": t, "timestamp": time.time(), "pinned": False} for t in data]
+                    return data
             except:
                 pass
         return []
@@ -180,14 +185,12 @@ class DictatorApp(Adw.Application):
     def save_history(self):
         os.makedirs(os.path.dirname(HISTORY_FILE), exist_ok=True)
         with open(HISTORY_FILE, 'w') as f:
-            json.dump(self.history[:20], f)
+            json.dump(self.history, f)
 
     def add_to_history(self, text):
-        if not text or (self.history and self.history[0] == text):
+        if not text or (self.history and self.history[0]["text"] == text):
             return
-        self.history.insert(0, text)
-        if len(self.history) > 10:
-            self.history = self.history[:10]
+        self.history.insert(0, {"text": text, "timestamp": time.time(), "pinned": False})
         self.save_history()
         
         # Trigger UI refresh if active
@@ -198,7 +201,11 @@ class DictatorApp(Adw.Application):
         if os.path.exists(CLIPBOARD_FILE):
             try:
                 with open(CLIPBOARD_FILE, 'r') as f:
-                    return json.load(f)
+                    data = json.load(f)
+                    # Migration: convert string list to object list
+                    if data and isinstance(data[0], str):
+                        return [{"text": t, "timestamp": time.time(), "pinned": False} for t in data]
+                    return data
             except:
                 pass
         return []
@@ -206,14 +213,12 @@ class DictatorApp(Adw.Application):
     def save_clipboards(self):
         os.makedirs(os.path.dirname(CLIPBOARD_FILE), exist_ok=True)
         with open(CLIPBOARD_FILE, 'w') as f:
-            json.dump(self.clipboards[:50], f)
+            json.dump(self.clipboards, f)
 
     def add_to_clipboards(self, text):
-        if not text or (self.clipboards and self.clipboards[0] == text):
+        if not text or (self.clipboards and self.clipboards[0]["text"] == text):
             return
-        self.clipboards.insert(0, text)
-        if len(self.clipboards) > 10:
-            self.clipboards = self.clipboards[:10]
+        self.clipboards.insert(0, {"text": text, "timestamp": time.time(), "pinned": False})
         self.save_clipboards()
         if hasattr(self, 'window') and self.window:
             GLib.idle_add(self.window.refresh_history_ui)
@@ -230,6 +235,44 @@ class DictatorApp(Adw.Application):
             except:
                 pass
             time.sleep(1.0)
+
+    def reorder_history(self, from_idx, to_idx):
+        if from_idx == to_idx: return
+        item = self.history.pop(from_idx)
+        self.history.insert(to_idx, item)
+        self.save_history()
+        GLib.idle_add(self.window.refresh_history_ui)
+
+    def reorder_clipboards(self, from_idx, to_idx):
+        if from_idx == to_idx: return
+        item = self.clipboards.pop(from_idx)
+        self.clipboards.insert(to_idx, item)
+        self.save_clipboards()
+        GLib.idle_add(self.window.refresh_history_ui)
+
+    def prune_history(self):
+        now = time.time()
+        expiry = 3600 # 1 hour
+        changed = False
+        
+        # Prune Transcripts
+        new_history = [item for item in self.history if item.get("pinned") or (now - item["timestamp"] < expiry)]
+        if len(new_history) != len(self.history):
+            self.history = new_history
+            self.save_history()
+            changed = True
+            
+        # Prune Clipboards
+        new_clipboards = [item for item in self.clipboards if item.get("pinned") or (now - item["timestamp"] < expiry)]
+        if len(new_clipboards) != len(self.clipboards):
+            self.clipboards = new_clipboards
+            self.save_clipboards()
+            changed = True
+            
+        if changed and hasattr(self, 'window') and self.window:
+            GLib.idle_add(self.window.refresh_history_ui)
+            
+        return True # Keep timeout running
 
     def check_clipboard(self):
         display = Gdk.Display.get_default()
@@ -249,57 +292,13 @@ class DictatorApp(Adw.Application):
         except Exception as e:
             print(f"DEBUG: Unexpected clipboard error: {e}")
 
-class PreferencesWindow(Adw.PreferencesWindow):
-    def __init__(self, parent):
-        super().__init__(transient_for=parent)
-        print("DEBUG: PreferencesWindow __init__ V3")
-        self.parent = parent
-        self.app = parent.get_application()
-        page = Adw.PreferencesPage()
-        self.add(page)
-        
-        group = Adw.PreferencesGroup(title="Dictator Core")
-        page.add(group)
-        
-        # Hotkey setting
-        hotkey_row = Adw.EntryRow(title="Global Hotkey", text=self.app.settings["hotkey"])
-        hotkey_row.connect("changed", self.on_hotkey_changed)
-        group.add(hotkey_row)
-        
-        # Color Picker Row
-        color_row = Adw.ActionRow(title="Accent Color Glow")
-        self.color_btn = Gtk.ColorButton()
-        rgba = Gdk.RGBA()
-        rgba.parse(self.app.settings["accent_color"])
-        self.color_btn.set_rgba(rgba)
-        self.color_btn.connect("color-set", self.on_color_set)
-        color_row.add_suffix(self.color_btn)
-        group.add(color_row)
-
-        # Model selection
-        model_row = Adw.ComboRow(title="AI Model", selected=0 if self.app.settings["model"] == "tiny" else 1)
-        model_row.set_model(Gtk.StringList.new(["Tiny (Fastest)", "Base (Balanced)"]))
-        model_row.connect("notify::selected", self.on_model_changed)
-        group.add(model_row)
-
-        # New: Overlay Image Selection
-        overlay_row = Adw.ActionRow(title="Recording Overlay (GIF/Image)")
-        overlay_btn = Gtk.Button(label="Select File")
-        overlay_btn.connect("clicked", self.on_overlay_pick_clicked)
-        overlay_row.add_suffix(overlay_btn)
-        group.add(overlay_row)
-
-        # New: Clipboard Monitoring Toggle
-        cb_row = Adw.SwitchRow(title="Monitor System Clipboard", active=self.app.settings["monitor_clipboard"])
-        cb_row.connect("notify::active", self.on_clipboard_toggle)
-        group.add(cb_row)
-
+# Settings Handlers
     def on_hotkey_changed(self, row):
         new_key = row.get_text().lower()
         if new_key:
             self.app.settings["hotkey"] = new_key
             self.app.save_settings()
-            self.parent.update_hotkey()
+            self.update_hotkey()
 
     def on_color_set(self, btn):
         rgba = btn.get_rgba()
@@ -308,17 +307,44 @@ class PreferencesWindow(Adw.PreferencesWindow):
         )
         self.app.settings["accent_color"] = hex_color
         self.app.save_settings()
-        self.parent.apply_css()
+        self.apply_css()
 
     def on_model_changed(self, row, pspec):
         models = ["tiny", "base"]
         self.app.settings["model"] = models[row.get_selected()]
         self.app.save_settings()
-        self.parent.model = None
+        self.model = None
 
     def on_clipboard_toggle(self, row, pspec):
         self.app.settings["monitor_clipboard"] = row.get_active()
         self.app.save_settings()
+        if self.app.settings["monitor_clipboard"]:
+            self.app.start_clipboard_monitor()
+
+    def on_paste_toggled(self, row, pspec):
+        self.app.settings["auto_paste"] = row.get_active()
+        self.app.save_settings()
+
+    def on_overlay_pick_clicked(self, btn):
+        dialog = Gtk.FileDialog(title="Select Recording Overlay (GIF/Image)")
+        filters = Gio.ListStore.new(Gtk.FileFilter)
+        f_images = Gtk.FileFilter()
+        f_images.set_name("Image files")
+        f_images.add_mime_type("image/gif")
+        f_images.add_mime_type("image/png")
+        f_images.add_mime_type("image/jpeg")
+        filters.append(f_images)
+        dialog.set_filters(filters)
+        dialog.open(self, None, self.on_overlay_file_selected)
+
+    def on_overlay_file_selected(self, dialog, result):
+        try:
+            file = dialog.open_finish(result)
+            if file:
+                self.app.settings["overlay_image"] = file.get_path()
+                self.app.save_settings()
+                self.overlay = None # Force recreation
+        except: pass
 
     def on_overlay_pick_clicked(self, btn):
         print("DEBUG: Overlay pick clicked")
@@ -390,13 +416,97 @@ class DictatorWindow(Adw.ApplicationWindow):
         except: pass
 
     def setup_ui(self):
-        view_stack = Adw.ToolbarView()
+        # Header with navigation
+        header = Adw.HeaderBar()
+        self.set_titlebar(header)
+        
+        view_stack = Adw.ViewStack()
+        view_stack.set_transition_type(Adw.ViewStackTransitionType.SLIDE_LEFT_RIGHT)
         self.set_content(view_stack)
 
-        header = Adw.HeaderBar()
-        view_stack.add_top_bar(header)
+        view_switcher = Adw.ViewSwitcher()
+        view_switcher.set_stack(view_stack)
+        header.set_title_widget(view_switcher)
+
+        # 1. DASHBOARD PAGE
+        self.dashboard_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=20)
+        self.dashboard_box.set_margin_top(30)
+        self.dashboard_box.set_margin_bottom(30)
+        self.dashboard_box.set_margin_start(30)
+        self.dashboard_box.set_margin_end(30)
         
-        # History Button
+        dashboard_page = view_stack.add_titled_with_icon(self.dashboard_box, "dashboard", "Dashboard", "app-dashboard-symbolic")
+        
+        # Left Column: Orb and Text
+        left_col = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=20)
+        left_col.set_hexpand(True)
+        self.dashboard_box.append(left_col)
+
+        # Right Column: Dashboard Clipboards
+        right_col = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        right_col.set_size_request(280, -1)
+        right_col.add_css_class("glass-view")
+        right_col.set_margin_start(10)
+        
+        clip_label = Gtk.Label(label="📋 RECENT CLIPBOARDS")
+        clip_label.add_css_class("caption")
+        clip_label.set_margin_top(10)
+        right_col.append(clip_label)
+
+        self.dashboard_clipboard_list = Gtk.ListBox()
+        self.dashboard_clipboard_list.set_selection_mode(Gtk.SelectionMode.NONE)
+        dash_clip_scroll = Gtk.ScrolledWindow()
+        dash_clip_scroll.set_vexpand(True)
+        dash_clip_scroll.set_child(self.dashboard_clipboard_list)
+        right_col.append(dash_clip_scroll)
+        self.dashboard_box.append(right_col)
+
+        # 2. SETTINGS PAGE
+        settings_page = Adw.PreferencesPage()
+        view_stack.add_titled_with_icon(settings_page, "settings", "Settings", "emblem-system-symbolic")
+        
+        core_group = Adw.PreferencesGroup(title="Dictator Core")
+        settings_page.add(core_group)
+        
+        # Hotkey setting
+        hotkey_row = Adw.EntryRow(title="Global Hotkey", text=self.app.settings["hotkey"])
+        hotkey_row.connect("changed", self.on_hotkey_changed)
+        core_group.add(hotkey_row)
+        
+        # Color Picker Row
+        color_row = Adw.ActionRow(title="Accent Color Glow")
+        self.color_btn = Gtk.ColorButton()
+        rgba = Gdk.RGBA()
+        rgba.parse(self.app.settings["accent_color"])
+        self.color_btn.set_rgba(rgba)
+        self.color_btn.connect("color-set", self.on_color_set)
+        color_row.add_suffix(self.color_btn)
+        core_group.add(color_row)
+
+        # Model selection
+        model_row = Adw.ComboRow(title="AI Model", selected=0 if self.app.settings["model"] == "tiny" else 1)
+        model_row.set_model(Gtk.StringList.new(["Tiny (Fastest)", "Base (Balanced)"]))
+        model_row.connect("notify::selected", self.on_model_changed)
+        core_group.add(model_row)
+
+        # Overlay Image Selection
+        overlay_row = Adw.ActionRow(title="Recording Overlay (GIF/Image)")
+        overlay_btn = Gtk.Button(label="Select File")
+        overlay_btn.connect("clicked", self.on_overlay_pick_clicked)
+        overlay_row.add_suffix(overlay_btn)
+        core_group.add(overlay_row)
+        
+        # Auto Paste Toggle
+        paste_row = Adw.SwitchRow(title="Auto-Paste on Release", active=self.app.settings["auto_paste"])
+        paste_row.connect("notify::active", self.on_paste_toggled)
+        core_group.add(paste_row)
+        
+        # Clipboard Monitor Toggle
+        clip_row = Adw.SwitchRow(title="Monitor Clipboard History", active=self.app.settings["monitor_clipboard"])
+        clip_row.connect("notify::active", self.on_clipboard_toggle)
+        core_group.add(clip_row)
+
+        # Rest of headers/buttons
         history_btn = Gtk.Button(icon_name="document-open-recent-symbolic")
         history_btn.connect("clicked", self.on_history_clicked)
         header.pack_start(history_btn)
@@ -412,37 +522,14 @@ class DictatorWindow(Adw.ApplicationWindow):
         popover_box.set_margin_end(10)
         self.history_popover.set_child(popover_box)
         
-        stack = Gtk.Stack()
-        stack.set_transition_type(Gtk.StackTransitionType.SLIDE_LEFT_RIGHT)
-        
-        switcher = Gtk.StackSwitcher()
-        switcher.set_stack(stack)
-        popover_box.append(switcher)
-        popover_box.append(stack)
-        
         self.history_list = Gtk.ListBox()
         self.history_list.set_selection_mode(Gtk.SelectionMode.NONE)
         history_scroll = Gtk.ScrolledWindow(min_content_height=400, min_content_width=350)
         history_scroll.set_child(self.history_list)
-        stack.add_titled(history_scroll, "transmissions", "🎙️ Transcripts")
+        popover_box.append(history_scroll)
         
-        self.clipboard_list = Gtk.ListBox()
-        self.clipboard_list.set_selection_mode(Gtk.SelectionMode.NONE)
-        clipboard_scroll = Gtk.ScrolledWindow(min_content_height=400, min_content_width=350)
-        clipboard_scroll.set_child(self.clipboard_list)
-        stack.add_titled(clipboard_scroll, "clipboards", "📋 Clipboard History")
-
-        # Settings Button
-        settings_btn = Gtk.Button(icon_name="emblem-system-symbolic")
-        settings_btn.connect("clicked", self.on_preferences_clicked)
-        header.pack_end(settings_btn)
-
-        main_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=20)
-        main_box.set_margin_top(30)
-        main_box.set_margin_bottom(30)
-        main_box.set_margin_start(30)
-        main_box.set_margin_end(30)
-        view_stack.set_content(main_box)
+        # We'll use the switcher in dashboard or somewhere else if needed, but for now 
+        # let's keep the popover simple for transcripts.
 
         # Left Column: Orb and Text
         left_col = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=20)
@@ -500,28 +587,100 @@ class DictatorWindow(Adw.ApplicationWindow):
         while (child := self.history_list.get_first_child()): self.history_list.remove(child)
         if not self.app.history: self.history_list.append(Gtk.Label(label="No recent transmissions"))
         else:
-            for item in self.app.history:
+            for i, item in enumerate(self.app.history):
+                text = item["text"]
+                pinned = item.get("pinned", False)
                 row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
-                label = Gtk.Label(label=item[:40] + ("..." if len(item) > 40 else ""))
+                row.add_css_class("history-row")
+                
+                # Add drag handle/icon
+                drag_handle = Gtk.Image(icon_name="view-more-symbolic")
+                drag_handle.set_opacity(0.5)
+                row.append(drag_handle)
+                
+                label = Gtk.Label(label=text[:40] + ("..." if len(text) > 40 else ""))
                 label.set_hexpand(True)
                 label.set_halign(Gtk.Align.START)
+                
+                pin_btn = Gtk.Button(icon_name="pinnable-symbolic" if not pinned else "pin-symbolic")
+                pin_btn.add_css_class("flat")
+                pin_btn.connect("clicked", self.on_toggle_pin, "history", i)
+                
                 copy_btn = Gtk.Button(icon_name="edit-copy-symbolic")
-                copy_btn.connect("clicked", lambda b, t=item: self.copy_text_to_clipboard(t))
-                row.append(label); row.append(copy_btn); self.history_list.append(row)
+                copy_btn.connect("clicked", lambda b, t=text: self.copy_text_to_clipboard(t))
+                
+                row.append(pin_btn); row.append(label); row.append(copy_btn)
+                
+                # Drag & Drop Support
+                source = Gtk.DragSource.new()
+                source.set_actions(Gdk.DragAction.MOVE)
+                source.connect("prepare", self.on_drag_prepare, "history", i)
+                row.add_controller(source)
+                
+                target = Gtk.DropTarget.new(Gdk.TYPE_INT, Gdk.DragAction.MOVE)
+                target.connect("drop", self.on_drop_row, "history", i)
+                row.add_controller(target)
+                
+                self.history_list.append(row)
 
         # Refresh clipboards
-        for lb in [self.clipboard_list, self.dashboard_clipboard_list]:
+        for lb_name, lb in [("clipboard_popover", self.clipboard_list), ("dashboard", self.dashboard_clipboard_list)]:
             while (child := lb.get_first_child()): lb.remove(child)
             if not self.app.clipboards:
                 lb.append(Gtk.Label(label="Clipboard history is empty"))
             else:
-                for item in self.app.clipboards:
+                for i, item in enumerate(self.app.clipboards):
+                    text = item["text"]
+                    pinned = item.get("pinned", False)
                     row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
-                    label = Gtk.Label(label=item[:40] + ("..." if len(item) > 40 else ""))
+                    row.add_css_class("clipboard-row")
+                    
+                    label = Gtk.Label(label=text[:40] + ("..." if len(text) > 40 else ""))
                     label.set_hexpand(True); label.set_halign(Gtk.Align.START)
+                    
+                    pin_btn = Gtk.Button(icon_name="pinnable-symbolic" if not pinned else "pin-symbolic")
+                    pin_btn.add_css_class("flat")
+                    pin_btn.connect("clicked", self.on_toggle_pin, "clipboard", i)
+                    
                     copy_btn = Gtk.Button(icon_name="edit-copy-symbolic")
-                    copy_btn.connect("clicked", lambda b, t=item: self.copy_text_to_clipboard(t))
-                    row.append(label); row.append(copy_btn); lb.append(row)
+                    copy_btn.connect("clicked", lambda b, t=text: self.copy_text_to_clipboard(t))
+                    
+                    row.append(pin_btn); row.append(label); row.append(copy_btn)
+                    
+                    # Drag & Drop Support
+                    source = Gtk.DragSource.new()
+                    source.set_actions(Gdk.DragAction.MOVE)
+                    source.connect("prepare", self.on_drag_prepare, "clipboard", i)
+                    row.add_controller(source)
+                    
+                    dt = Gtk.DropTarget.new(Gdk.TYPE_INT, Gdk.DragAction.MOVE)
+                    dt.connect("drop", self.on_drop_row, "clipboard", i)
+                    row.add_controller(dt)
+                    
+                    lb.append(row)
+
+    def on_drag_prepare(self, source, x, y, type, index):
+        # We wrap the index in a Gdk.ContentProvider
+        # In modern GTK4 we use GValue
+        value = GObject.Value()
+        value.init(GObject.TYPE_INT)
+        value.set_int(index)
+        return Gdk.ContentProvider.new_for_value(value)
+
+    def on_drop_row(self, target, value, x, y, type, to_idx):
+        from_idx = value
+        if type == "history": self.app.reorder_history(from_idx, to_idx)
+        else: self.app.reorder_clipboards(from_idx, to_idx)
+        return True
+
+    def on_toggle_pin(self, btn, type, index):
+        if type == "history":
+            self.app.history[index]["pinned"] = not self.app.history[index].get("pinned", False)
+            self.app.save_history()
+        else:
+            self.app.clipboards[index]["pinned"] = not self.app.clipboards[index].get("pinned", False)
+            self.app.save_clipboards()
+        self.refresh_history_ui()
 
     def on_history_clicked(self, btn):
         self.refresh_history_ui()
