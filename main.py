@@ -65,6 +65,7 @@ class RecordingOverlay(Gtk.Window):
         
         self.img = Gtk.Image()
         self.img.set_pixel_size(200)
+        self.img.add_css_class("recording-gif-glow")
         self.content_box.append(self.img)
         
         # We'll skip the status label as per user request for "only the gif"

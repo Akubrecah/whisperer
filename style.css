@@ -80,3 +80,14 @@ headerbar {
     padding: 20px;
 }
 
+.recording-gif-glow {
+    filter: drop-shadow(0 0 15px var(--neon-accent));
+    animation: pulsing-glow 2s infinite ease-in-out;
+}
+
+@keyframes pulsing-glow {
+    0% { filter: drop-shadow(0 0 10px var(--neon-accent)); transform: scale(1); }
+    50% { filter: drop-shadow(0 0 25px var(--neon-accent)); transform: scale(1.02); }
+    100% { filter: drop-shadow(0 0 10px var(--neon-accent)); transform: scale(1); }
+}
+
