@@ -16,6 +16,9 @@ from gi.repository import Gtk, Adw, GLib, Gio, Gdk
 # For Global Hotkey and Auto-Paste
 from pynput import keyboard
 
+# Robust pathing for installation
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+STYLE_FILE = os.path.join(SCRIPT_DIR, "style.css")
 SETTINGS_FILE = os.path.expanduser("~/.config/dictator_settings.json")
 HISTORY_FILE = os.path.expanduser("~/.config/dictator_history.json")
 
