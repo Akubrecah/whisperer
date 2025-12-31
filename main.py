@@ -185,7 +185,10 @@ class DictatorWindow(Adw.ApplicationWindow):
         self.history_popover.set_parent(history_btn)
         self.history_list = Gtk.ListBox()
         self.history_list.set_selection_mode(Gtk.SelectionMode.NONE)
-        self.history_list.set_margin_all(10)
+        self.history_list.set_margin_top(10)
+        self.history_list.set_margin_bottom(10)
+        self.history_list.set_margin_start(10)
+        self.history_list.set_margin_end(10)
         
         scrolled_history = Gtk.ScrolledWindow()
         scrolled_history.set_min_content_height(300)
