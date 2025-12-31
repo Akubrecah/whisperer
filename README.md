@@ -112,8 +112,38 @@ Want to contribute or customize?
 
 ---
 
+## 📜 Changelog
+
+### Version 3.3.0 - "The Persistent Release"
+- **Integrated Settings**: Settings moved from a popup window to a dedicated dashboard page.
+- **Pinning System**: History items and clipboards can now be pinned to stay forever.
+- **Auto-Expiry**: Unpinned items automatically disappear after 1 hour (configurable soon).
+- **Drag & Drop Reordering**: Reorder your history and clipboards by dragging them.
+- **Unlimited History**: Removed the 10-item limit for pinned content.
+
+### Version 3.2.0
+- **Dashboard Refresh**: Added clipboard history directly to the main main dashboard view.
+- **Release-to-Paste**: Refined "Hold-to-Talk" logic to wait for full final transcription before pasting.
+- **Split Layout**: Side-by-side view for recording orb and recent clips.
+
+### Version 3.1.2
+- **Stability**: Suppressed `GError` spam when copying non-text content (images/files) to clipboard.
+
+### Version 3.1.1
+- **Aesthetics**: Shifted GIF colors to pure white and changed neon pulse to Cyber Red.
+
+### Version 3.1.0 - "The Radiant Release"
+- **"Manual Crank" Engine**: Performance-optimized GIF engine for zero-freeze animation.
+- **Neon Pulse**: CSS-driven glow effects for the recording overlay.
+- **Focus Protection**: Non-intrusive windows that don't steal user focus.
+
+### Version 3.0.0
+- **Initial Whisper V3**: Complete migration to `faster-whisper` and GTK4.
+
+---
+
 ## 📄 License & Credits
 Developed with ❤️ by **Akubrecah**.
 Powered by OpenAI's Whisper models and the LibAdwaita team.
 
-*Version 3.1.0 - "The Radiant Release"*
+*Version 3.3.0 - Current Stable Development*
