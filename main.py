@@ -49,8 +49,19 @@ class RecordingOverlay(Gtk.Window):
         self.set_can_target(False)
         self.set_decorated(False)
         self.set_resizable(False)
+        self.set_keep_above(True)
         
-        self.set_default_size(400, 600)
+        # Get monitor geometry for placement
+        display = Gdk.Display.get_default()
+        monitors = display.get_monitors()
+        if monitors.get_n_items() > 0:
+            monitor = monitors.get_item(0)
+            geometry = monitor.get_geometry()
+            # Set window to cover full width and height to ensure bottom-center placement is possible
+            self.set_default_size(geometry.width, geometry.height)
+        else:
+            self.set_default_size(800, 1000)
+
         self.add_css_class("overlay-window-transparent")
         
         # This is critical for true transparency in some GTK environments
