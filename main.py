@@ -2,6 +2,7 @@ import os
 import threading
 import queue
 import time
+import json
 import numpy as np
 import sounddevice as sd
 from faster_whisper import WhisperModel
@@ -15,37 +16,157 @@ from gi.repository import Gtk, Adw, GLib, Gio, Gdk
 # For Global Hotkey and Auto-Paste
 from pynput import keyboard
 
+SETTINGS_FILE = os.path.expanduser("~/.config/dictator_settings.json")
+HISTORY_FILE = os.path.expanduser("~/.config/dictator_history.json")
+
+DEFAULT_SETTINGS = {
+    "hotkey": "f8",
+    "accent_color": "#39ff14", # Cyber Lime
+    "theme": "dark",
+    "model": "tiny",
+    "auto_paste": True
+}
+
 class DictatorApp(Adw.Application):
     def __init__(self):
         super().__init__(application_id='com.example.Dictator',
                          flags=Gio.ApplicationFlags.FLAGS_NONE)
+        self.settings = self.load_settings()
+        self.history = self.load_history()
+
+    def load_settings(self):
+        if os.path.exists(SETTINGS_FILE):
+            try:
+                with open(SETTINGS_FILE, 'r') as f:
+                    return {**DEFAULT_SETTINGS, **json.load(f)}
+            except:
+                pass
+        return DEFAULT_SETTINGS.copy()
+
+    def save_settings(self):
+        os.makedirs(os.path.dirname(SETTINGS_FILE), exist_ok=True)
+        with open(SETTINGS_FILE, 'w') as f:
+            json.dump(self.settings, f)
+
+    def load_history(self):
+        if os.path.exists(HISTORY_FILE):
+            try:
+                with open(HISTORY_FILE, 'r') as f:
+                    return json.load(f)
+            except:
+                pass
+        return []
+
+    def save_history(self):
+        os.makedirs(os.path.dirname(HISTORY_FILE), exist_ok=True)
+        with open(HISTORY_FILE, 'w') as f:
+            json.dump(self.history[:20], f) # Keep last 20
+
+    def add_to_history(self, text):
+        if not text or (self.history and self.history[0] == text):
+            return
+        self.history.insert(0, text)
+        self.save_history()
 
     def do_activate(self):
         self.window = DictatorWindow(application=self)
         self.window.present()
 
+class PreferencesWindow(Adw.PreferencesWindow):
+    def __init__(self, parent):
+        super().__init__(transient_for=parent)
+        self.parent = parent
+        self.app = parent.get_application()
+        
+        page = Adw.PreferencesPage()
+        self.add(page)
+        
+        group = Adw.PreferencesGroup(title="User Desires")
+        page.add(group)
+        
+        # Hotkey setting
+        hotkey_row = Adw.EntryRow(title="Global Hotkey", text=self.app.settings["hotkey"])
+        hotkey_row.connect("changed", self.on_hotkey_changed)
+        group.add(hotkey_row)
+        
+        # Color Picker Row
+        color_row = Adw.ActionRow(title="Accent Color Glow")
+        self.color_btn = Gtk.ColorButton()
+        # Set initial color
+        rgba = Gdk.RGBA()
+        rgba.parse(self.app.settings["accent_color"])
+        self.color_btn.set_rgba(rgba)
+        self.color_btn.connect("color-set", self.on_color_set)
+        color_row.add_suffix(self.color_btn)
+        group.add(color_row)
+
+        # Model selection
+        model_row = Adw.ComboRow(title="AI Model", selected=0 if self.app.settings["model"] == "tiny" else 1)
+        model_row.set_model(Gtk.StringList.new(["Tiny (Fastest)", "Base (Balanced)"]))
+        model_row.connect("notify::selected", self.on_model_changed)
+        group.add(model_row)
+
+    def on_hotkey_changed(self, row):
+        new_key = row.get_text().lower()
+        if new_key:
+            self.app.settings["hotkey"] = new_key
+            self.app.save_settings()
+            self.parent.update_hotkey()
+
+    def on_color_set(self, btn):
+        rgba = btn.get_rgba()
+        hex_color = "#{:02x}{:02x}{:02x}".format(
+            int(rgba.red * 255), int(rgba.green * 255), int(rgba.blue * 255)
+        )
+        self.app.settings["accent_color"] = hex_color
+        self.app.save_settings()
+        self.parent.apply_css()
+
+    def on_model_changed(self, row, pspec):
+        models = ["tiny", "base"]
+        self.app.settings["model"] = models[row.get_selected()]
+        self.app.save_settings()
+        self.parent.model = None
+
 class DictatorWindow(Adw.ApplicationWindow):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
+        self.app = kwargs["application"]
+        
+        self.set_title("Dictator")
+        self.set_default_size(800, 600)
+        self.add_css_class("futuristic-window")
 
-        self.set_title("Dictator - Hold F8 to Talk")
-        self.set_default_size(700, 500)
-
-        # State management
+        # State
         self.recording = False
         self.audio_queue = queue.Queue()
         self.model = None
         self.current_transcript = ""
-        
-        # Keyboard Controller for Auto-Paste
         self.keyboard_controller = keyboard.Controller()
-        self.trigger_key = keyboard.Key.f8 # Default Hotkey
         
-        # UI Setup
         self.setup_ui()
-        
-        # Start Global Listener
+        self.apply_css()
         self.start_hotkey_listener()
+
+    def apply_css(self):
+        css_provider = Gtk.CssProvider()
+        try:
+            if not os.path.exists(STYLE_FILE):
+                print(f"CSS not found at {STYLE_FILE}")
+                return
+            with open(STYLE_FILE, "r") as f:
+                css_data = f.read()
+            
+            css_data = css_data.replace("--neon-accent: #39ff14;", f"--neon-accent: {self.app.settings['accent_color']};")
+            
+            css_provider.load_from_data(css_data, len(css_data))
+            Gtk.StyleContext.add_provider_for_display(
+                Gdk.Display.get_default(),
+                css_provider,
+                Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
+            )
+        except Exception as e:
+            print(f"CSS Error: {e}")
 
     def setup_ui(self):
         view_stack = Adw.ToolbarView()
@@ -53,45 +174,109 @@ class DictatorWindow(Adw.ApplicationWindow):
 
         header = Adw.HeaderBar()
         view_stack.add_top_bar(header)
+        
+        # History Button
+        history_btn = Gtk.Button(icon_name="document-open-recent-symbolic")
+        history_btn.connect("clicked", self.on_history_clicked)
+        header.pack_start(history_btn)
+        
+        # History Popover
+        self.history_popover = Gtk.Popover()
+        self.history_popover.set_parent(history_btn)
+        self.history_list = Gtk.ListBox()
+        self.history_list.set_selection_mode(Gtk.SelectionMode.NONE)
+        self.history_list.set_margin_all(10)
+        
+        scrolled_history = Gtk.ScrolledWindow()
+        scrolled_history.set_min_content_height(300)
+        scrolled_history.set_min_content_width(300)
+        scrolled_history.set_child(self.history_list)
+        self.history_popover.set_child(scrolled_history)
 
-        main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=16)
-        main_box.set_margin_top(24)
-        main_box.set_margin_bottom(24)
-        main_box.set_margin_start(24)
-        main_box.set_margin_end(24)
+        # Settings Button
+        settings_btn = Gtk.Button(icon_name="emblem-system-symbolic")
+        settings_btn.connect("clicked", self.on_preferences_clicked)
+        header.pack_end(settings_btn)
+
+        main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=20)
+        main_box.set_margin_top(30)
+        main_box.set_margin_bottom(30)
+        main_box.set_margin_start(30)
+        main_box.set_margin_end(30)
         view_stack.set_content(main_box)
 
+        # Visual Orb
+        self.orb_btn = Gtk.Button()
+        self.orb_btn.add_css_class("record-orb")
+        self.orb_btn.set_halign(Gtk.Align.CENTER)
+        self.orb_btn.connect("clicked", self.on_record_toggled)
+        
+        overlay = Gtk.Overlay()
+        overlay.set_child(self.orb_btn)
+        self.orb_label = Gtk.Label(label="READY")
+        self.orb_label.add_css_class("status-caption")
+        overlay.add_overlay(self.orb_label)
+        main_box.append(overlay)
+
+        # Text area
         scrolled = Gtk.ScrolledWindow()
         scrolled.set_vexpand(True)
-        scrolled.set_min_content_height(300)
+        scrolled.add_css_class("glass-view")
         self.text_view = Gtk.TextView()
         self.text_view.set_editable(False)
         self.text_view.set_wrap_mode(Gtk.WrapMode.WORD)
         scrolled.set_child(self.text_view)
         main_box.append(scrolled)
 
-        button_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
-        button_box.set_halign(Gtk.Align.CENTER)
-        main_box.append(button_box)
-
-        self.record_btn = Gtk.Button(label="Start (or hold F8)")
-        self.record_btn.add_css_class("suggested-action")
-        self.record_btn.add_css_class("pill")
-        self.record_btn.connect("clicked", self.on_record_toggled)
-        button_box.append(self.record_btn)
-
-        self.copy_btn = Gtk.Button(label="Copy Transcript")
-        self.copy_btn.connect("clicked", self.on_copy_clicked)
-        button_box.append(self.copy_btn)
-
-        self.status_label = Gtk.Label(label=f"Hold {self.trigger_key} to dictate globally")
+        self.status_label = Gtk.Label(label="Initializing neural systems...")
         self.status_label.add_css_class("caption")
         main_box.append(self.status_label)
 
-    def start_hotkey_listener(self):
-        """Initializes the background listener for global key events."""
-        self.listener = keyboard.Listener(on_press=self.on_key_press, on_release=self.on_key_release)
-        self.listener.start()
+    def on_history_clicked(self, btn):
+        # Refresh history list
+        while (child := self.history_list.get_first_child()):
+            self.history_list.remove(child)
+        
+        if not self.app.history:
+            self.history_list.append(Gtk.Label(label="No recent transmissions"))
+        else:
+            for item in self.app.history:
+                row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+                label = Gtk.Label(label=item[:40] + ("..." if len(item) > 40 else ""))
+                label.set_hexpand(True)
+                label.set_halign(Gtk.Align.START)
+                
+                copy_btn = Gtk.Button(icon_name="edit-copy-symbolic")
+                copy_btn.connect("clicked", lambda b, t=item: self.copy_text_to_clipboard(t))
+                
+                row.append(label)
+                row.append(copy_btn)
+                self.history_list.append(row)
+        
+        self.history_popover.popup()
+
+    def copy_text_to_clipboard(self, text):
+        clipboard = self.get_display().get_clipboard()
+        clipboard.set(text)
+        self.status_label.set_label("History item copied! 📋")
+        self.history_popover.popdown()
+
+    def on_preferences_clicked(self, btn):
+        prefs = PreferencesWindow(self)
+        prefs.present()
+
+    def update_hotkey(self):
+        if hasattr(self, 'listener'):
+            self.listener.stop()
+        key_name = self.app.settings["hotkey"]
+        try:
+            if hasattr(keyboard.Key, key_name):
+                self.trigger_key = getattr(keyboard.Key, key_name)
+            else:
+                self.trigger_key = keyboard.KeyCode.from_char(key_name)
+            self.listener = keyboard.Listener(on_press=self.on_key_press, on_release=self.on_key_release)
+            self.listener.start()
+        except: pass
 
     def on_key_press(self, key):
         if key == self.trigger_key and not self.recording:
@@ -99,7 +284,7 @@ class DictatorWindow(Adw.ApplicationWindow):
 
     def on_key_release(self, key):
         if key == self.trigger_key and self.recording:
-            GLib.idle_add(self.stop_live_session, True) # True means auto-paste
+            GLib.idle_add(self.stop_live_session, True)
 
     def on_record_toggled(self, btn):
         if not self.recording:
@@ -110,16 +295,12 @@ class DictatorWindow(Adw.ApplicationWindow):
     def start_live_session(self):
         if self.recording: return
         self.recording = True
-        self.record_btn.set_label("Listening...")
-        self.record_btn.remove_css_class("suggested-action")
-        self.record_btn.add_css_class("destructive-action")
-        self.status_label.set_label("Recording... Speak now!")
-
+        self.orb_btn.add_css_class("recording")
+        self.orb_label.set_label("LISTENING")
+        self.status_label.set_label("Capture in progress...")
         self.current_transcript = ""
         self.text_view.get_buffer().set_text("")
-        while not self.audio_queue.empty():
-            self.audio_queue.get()
-
+        while not self.audio_queue.empty(): self.audio_queue.get()
         self.stream = sd.InputStream(samplerate=16000, channels=1, callback=self.audio_callback)
         self.stream.start()
         threading.Thread(target=self.transcription_worker, daemon=True).start()
@@ -127,58 +308,43 @@ class DictatorWindow(Adw.ApplicationWindow):
     def stop_live_session(self, auto_paste=False):
         if not self.recording: return
         self.recording = False
-        self.record_btn.set_label("Start (or hold F8)")
-        self.record_btn.remove_css_class("destructive-action")
-        self.record_btn.add_css_class("suggested-action")
-        self.status_label.set_label("Processing final segments...")
-        
+        self.orb_btn.remove_css_class("recording")
+        self.orb_label.set_label("READY")
         if hasattr(self, 'stream'):
             self.stream.stop()
             self.stream.close()
+        
+        # Add to history
+        if self.current_transcript:
+            self.app.add_to_history(self.current_transcript)
 
         if auto_paste:
-            # Short delay to ensure final transcription chunk is processed
             threading.Thread(target=self.wait_and_paste, daemon=True).start()
         else:
-            self.status_label.set_label("Done.")
+            self.status_label.set_label("Session finished.")
 
     def audio_callback(self, indata, frames, time, status):
-        if self.recording:
-            self.audio_queue.put(indata.copy().flatten())
+        if self.recording: self.audio_queue.put(indata.copy().flatten())
 
     def transcription_worker(self):
         try:
             if self.model is None:
-                GLib.idle_add(self.status_label.set_label, "Loading AI model...")
-                self.model = WhisperModel("tiny", device="cpu", compute_type="int8")
-                GLib.idle_add(self.status_label.set_label, "Ready!")
-
+                self.model = WhisperModel(self.app.settings["model"], device="cpu", compute_type="int8")
             audio_buffer = np.array([], dtype=np.float32)
-
             while self.recording:
                 chunks = []
-                start_poll = time.time()
-                while time.time() - start_poll < 0.6: # Faster cycle for immediacy
-                    try:
-                        chunk = self.audio_queue.get(timeout=0.1)
-                        chunks.append(chunk)
-                    except queue.Empty:
-                        continue
-                
+                start = time.time()
+                while time.time() - start < 0.6:
+                    try: chunks.append(self.audio_queue.get(timeout=0.1))
+                    except queue.Empty: continue
                 if not chunks: continue
                 audio_buffer = np.concatenate([audio_buffer] + chunks)
-                
-                # Context window for live updates
-                if len(audio_buffer) > 16000 * 10:
-                    audio_buffer = audio_buffer[-(16000 * 10):]
-
+                if len(audio_buffer) > 16000 * 15: audio_buffer = audio_buffer[-(16000 * 15):]
                 segments, _ = self.model.transcribe(audio_buffer, beam_size=1)
                 text = " ".join([s.text for s in segments]).strip()
                 self.current_transcript = text
                 GLib.idle_add(self.update_ui, text)
-
-        except Exception as e:
-            print(f"Inference error: {e}")
+        except Exception as e: print(f"Error: {e}")
 
     def update_ui(self, text):
         if text:
@@ -188,36 +354,20 @@ class DictatorWindow(Adw.ApplicationWindow):
         return False
 
     def wait_and_paste(self):
-        """Wait for the worker to finish the last chunk, then paste."""
-        time.sleep(0.3)
+        time.sleep(0.4)
         GLib.idle_add(self.perform_auto_paste)
 
     def perform_auto_paste(self):
-        text = self.current_transcript
-        if not text:
-            self.status_label.set_label("No text captured to paste.")
-            return False
-
-        # 1. Copy to clipboard
+        if not self.current_transcript: return False
         clipboard = self.get_display().get_clipboard()
-        clipboard.set(text)
-        
-        # 2. Simulate Paste
-        # Give the system a fraction of a second to sync clipboard
+        clipboard.set(self.current_transcript)
         time.sleep(0.1)
         with self.keyboard_controller.pressed(keyboard.Key.ctrl):
             self.keyboard_controller.press('v')
             self.keyboard_controller.release('v')
-        
-        self.status_label.set_label("Transcribed and Pasted! ⚡")
+        self.status_label.set_label("DATA TRANSMITTED ⚡")
         return False
 
-    def on_copy_clicked(self, btn):
-        if self.current_transcript:
-            clipboard = self.get_display().get_clipboard()
-            clipboard.set(self.current_transcript)
-            self.status_label.set_label("Transcript copied!")
-
 if __name__ == "__main__":
-    app = DictatorApp()
-    app.run(None)
+    adw_app = DictatorApp()
+    adw_app.run(None)
