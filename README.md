@@ -1,54 +1,119 @@
-# 🎙️ Dictator (Whisperer) - AI-Powered Voice Dictation
+# 🎙️ Dictator (Whisperer) - Professional AI Voice Dictation
 
-![Dictator Logo](sound-8825_256.gif)
+![Dictator V3 Overlay](sound-8825_256.gif)
 
-**Dictator** is a futuristic, offline speech-to-text tool for Linux, built with GTK4 and LibAdwaita. It uses the powerful `faster-whisper` AI model to provide lightning-fast, accurate transcriptions that are automatically pasted into your active application.
+**Dictator** is a high-performance, privacy-focused offline speech-to-text utility for Linux. Built with **GTK4**, **LibAdwaita**, and **faster-whisper**, it provides a seamless "Hold-to-Talk" experience that transcribes your voice in real-time and injects the text directly into any active application.
 
-## ✨ Features (Version 2.1)
+Version **3.1.0** introduces the "Manual Crank" animation engine and a clean, pulsing neon aesthetic.
 
-- **Hold-to-Talk**: Press and hold a global hotkey (Default: `F8`) to record.
-- **Auto-Paste**: Releasing the hotkey instantly transcribes and pastes the text into your focused field.
-- **Glassmorphic UI**: A stunning, modern interface with neon accents and a pulsing recording orb.
-- **Recording Overlay**: A visual indicator (GIF/Image) pops up while you're recording, so you always know when the "Dictator" is listening.
-- **Clipboard History**: Tracks your system clipboard changes with a dedicated history view.
-- **Offline AI**: No data leaves your machine. Powered by `faster-whisper` (Tiny/Base models).
-- **Customizable**: Change hotkeys, accent colors, and overlay images in the Preferences window.
+---
 
-## 🚀 Installation
+## 🚀 The V3 Experience
+
+Dictator is designed for users who want the speed of AI transcription without the overhead of cloud-based services. It sits silently in your tray or background until you need it.
+
+- **Non-Intrusive Overlay**: A beautiful, floating GIF appears at the bottom of your screen during recording. It is a "ghost" window—it never steals focus, so you can keep typing while the Dictator listens.
+- **Pulsing Neon Glow**: The recording indicator features a CSS-driven pulsing aura that makes the UI feel alive and responsive.
+- **Global Precision**: Uses `pynput` for cross-application hotkey detection and `sounddevice` for low-latency audio capture.
+
+---
+
+## ✨ Features
+
+### 🎙️ Core Dictation
+- **Hold-to-Talk (F8)**: The most intuitive way to dictate. Hold to record, release to paste.
+- **Auto-Injection**: Transcribed text is automatically typed into your current cursor position using virtual keyboard emulation.
+- **Advanced Noise Handling**: Optimized for various environments using Whisper's robust AI models.
+
+### 🎨 Visual & UI
+- **Glassmorphic Main Dashboard**: A sleek, semi-transparent interface following modern design trends.
+- **Dynamic Accent Colors**: Choose your "Neon Theme" (Lime, Blue, Pink, etc.) via the preferences.
+- **GIF Customization**: Upload your own recording animations.
+- **"Manual Crank" Animation**: Custom engine ensures GIFs play perfectly on all Linux distributions by manually advancing every frame at the hardware level.
+
+### ⚙️ Power Features
+- **Clipboard History Monitoring**: Keep track of everything you copy with a built-in history manager.
+- **Model Selection**: Switch between `tiny`, `base`, and `small` models depending on your hardware (CPU/GPU acceleration supported via CTranslate2).
+- **Auto-Start**: Integrated scripts to ensure Dictator is ready as soon as you log in.
+
+---
+
+## 🛠️ Technical Architecture
+
+### 1. The "Manual Crank" Engine
+GTK4 sometimes struggles with certain GIF formats in non-standard window types. Dictator V3 solves this by using a `GdkPixbuf.PixbufAnimation` iterator. We manually "crank" the frames using `GLib.timeout_add`, ensuring constant frame rates and zero freezes.
+
+### 2. Focus Stealing Prevention
+Overlay windows often interrupt workflows by stealing keyboard focus. Dictator implements a strict "Non-Focusable" policy:
+- `set_can_focus(False)`
+- `set_focusable(False)`
+- `set_can_target(False)`
+This ensures your active document stays active while the overlay glows below.
+
+### 3. Glassmorphic CSS Engine
+Custom CSS tokens are used to create the futuristic look:
+```css
+.glass-view {
+    background: rgba(30, 30, 30, 0.7);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+```
+
+---
+
+## 📥 Installation
 
 ### Prerequisites
-- Python 3.10+
-- GObject Introspection (for GTK4/Adwaita)
-- PortAudio (for audio recording)
+- **Python 3.10+**
+- **System Libraries**:
+  ```bash
+  sudo apt install python3-gi gir1.2-gtk-4.0 gir1.2-adw-1 libadwaita-1-0 portaudio19-dev ffmpeg
+  ```
 
-### Setup
-1. Clone the repository:
+### Automated Setup
+1. Clone the repo:
    ```bash
    git clone https://github.com/Akubrecah/whisperer.git
    cd whisperer
    ```
-2. Run the installation script:
+2. Run the main installer (handles virtual environments and requirements):
    ```bash
-   chmod +x install.sh
-   ./install.sh
+   bash install.sh
    ```
-3. (Optional) Enable autostart:
+3. Enable Autostart (Optional):
    ```bash
-   chmod +x setup_autostart.sh
-   ./setup_autostart.sh
+   bash setup_autostart.sh
    ```
-
-## 🛠️ Usage
-- **Start the app**: Launch `Dictator` from your application menu or run `python main.py`.
-- **Talk**: Hold `F8` and speak.
-- **Finish**: Release `F8`. Your text will appear where your cursor was.
-- **History**: Click the "History" button to see past transcriptions and clipboard history.
-
-## 🎨 Technology Stack
-- **AI**: `faster-whisper`
-- **GUI**: GTK4 & LibAdwaita
-- **Input**: `pynput`, `sounddevice`
-- **Lang**: Python
 
 ---
-Developed by **Akubrecah** | [Back to Top](#-dictator-whisperer---ai-powered-voice-dictation)
+
+## 🖥️ Usage Guide
+
+1. **Launch**: Open Dictator from your "Office" or "Utilities" menu.
+2. **Setup**: Go to **Preferences** to select your AI model (Tiny is fastest, Base is more accurate).
+3. **Dictate**: Simply hold your hotkey (Default: `F8`). Speak clearly.
+4. **Release**: Let go of the key. Wait ~1 second for the AI to process. The text will appear instantly.
+
+---
+
+## 👨‍💻 Development
+
+Want to contribute or customize?
+- **Styles**: Check `style.css` for the design system.
+- **Logic**: `main.py` contains the GTK application and the `TranscriptionWorker` thread.
+- **Assets**: Place your GIFs in the root or select them via the UI.
+
+### Requirements
+- `faster-whisper`
+- `sounddevice`
+- `pynput`
+- `PyGObject`
+
+---
+
+## 📄 License & Credits
+Developed with ❤️ by **Akubrecah**.
+Powered by OpenAI's Whisper models and the LibAdwaita team.
+
+*Version 3.1.0 - "The Radiant Release"*
