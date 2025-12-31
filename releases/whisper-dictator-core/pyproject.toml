@@ -1,0 +1,23 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "whisper-dictator-core"
+version = "0.1.0"
+description = "Core transcription and overlay logic for the Whisperer Dictator application."
+readme = "README.md"
+requires-python = ">=3.8"
+license = "MIT"
+authors = [
+    { name = "Akubrecah", email = "akubrecah@example.com" },
+]
+dependencies = [
+    "pynput",
+    "numpy",
+    "sounddevice",
+    "faster-whisper",
+]
+
+[project.urls]
+Homepage = "https://github.com/Akubrecah/whisperer"

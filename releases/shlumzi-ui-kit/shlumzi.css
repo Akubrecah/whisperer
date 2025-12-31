@@ -1,0 +1,63 @@
+:root {
+    --neon-accent: #ff7c00; /* Shlumzi Amber */
+    --neon-glow: rgba(255, 124, 0, 0.4);
+    --glow-spread: 25px;
+    --glass-bg: rgba(10, 10, 10, 0.85);
+    --panel-border: rgba(255, 124, 0, 0.15);
+}
+
+.futuristic-window {
+    background-color: #050505;
+    background-image: 
+        radial-gradient(circle at 50% 120%, rgba(255, 124, 0, 0.1) 0%, transparent 50%),
+        repeating-radial-gradient(circle at 50% 50%, transparent 0, transparent 40px, rgba(255, 124, 0, 0.03) 41px, transparent 42px);
+    color: #f0f0f0;
+}
+
+/* Orbital Rings Container */
+.orbital-container {
+    padding: 20px;
+    background: radial-gradient(circle at center, rgba(255, 124, 0, 0.05) 0%, transparent 70%);
+}
+
+.glass-view {
+    background: var(--glass-bg);
+    border-radius: 16px;
+    border: 1px solid var(--panel-border);
+    padding: 20px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+    font-family: 'Space Mono', 'Monospace';
+}
+
+.status-caption {
+    font-weight: 600;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--neon-accent);
+    text-shadow: 0 0 10px var(--neon-glow);
+}
+
+headerbar {
+    background: rgba(0,0,0,0.4);
+    border-bottom: 1px solid var(--panel-border);
+    padding: 10px;
+}
+
+/* Scrollbar Styling for Glass Views */
+scrolledwindow > viewport {
+    background: transparent;
+}
+
+listbox {
+    background: transparent;
+    color: #ccc;
+}
+
+row {
+    margin-bottom: 4px;
+    border-radius: 4px;
+}
+
+row:hover {
+    background: rgba(255, 124, 0, 0.1);
+}

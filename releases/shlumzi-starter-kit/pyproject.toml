@@ -1,0 +1,16 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "shlumzi-starter"
+version = "0.1.0"
+description = "A starter kit for building premium Adwaita/GTK4 apps with the Shlumzi aesthetic."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "PyGObject"
+]
+
+[project.scripts]
+shlumzi-demo = "shlumzi_starter.app:main"
