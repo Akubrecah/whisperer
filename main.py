@@ -25,7 +25,7 @@ CLIPBOARD_FILE = os.path.expanduser("~/.config/dictator_clipboards.json")
 
 DEFAULT_SETTINGS = {
     "hotkey": "f8",
-    "accent_color": "#39ff14", # Cyber Lime
+    "accent_color": "#ff7c00", # Shlumzi Amber
     "theme": "dark",
     "model": "tiny",
     "auto_paste": True,
@@ -410,7 +410,7 @@ class DictatorWindow(Adw.ApplicationWindow):
                 return
             with open(STYLE_FILE, "r") as f:
                 css_data = f.read()
-            css_data = css_data.replace("--neon-accent: #39ff14;", f"--neon-accent: {self.app.settings['accent_color']};")
+            css_data = css_data.replace("--neon-accent: #ff7c00;", f"--neon-accent: {self.app.settings['accent_color']};")
             css_provider.load_from_data(css_data, len(css_data))
             Gtk.StyleContext.add_provider_for_display(Gdk.Display.get_default(), css_provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
         except: pass
@@ -561,12 +561,19 @@ class DictatorWindow(Adw.ApplicationWindow):
         self.orb_btn.set_halign(Gtk.Align.CENTER)
         self.orb_btn.connect("clicked", self.on_record_toggled)
         
+        # Orbital Wrap (Shlumzi style)
+        orbital_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        orbital_box.add_css_class("orbital-container")
+        orbital_box.set_halign(Gtk.Align.CENTER)
+        orbital_box.set_valign(Gtk.Align.CENTER)
+        left_col.append(orbital_box)
+
         overlay = Gtk.Overlay()
         overlay.set_child(self.orb_btn)
         self.orb_label = Gtk.Label(label="READY")
         self.orb_label.add_css_class("status-caption")
         overlay.add_overlay(self.orb_label)
-        left_col.append(overlay)
+        orbital_box.append(overlay)
 
         # Text area
         scrolled = Gtk.ScrolledWindow()

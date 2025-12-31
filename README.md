@@ -114,6 +114,13 @@ Want to contribute or customize?
 
 ## 📜 Changelog
 
+### Version 4.0.0 - "The Shlumzi Release"
+- **Complete Visual Overhaul**: Redesigned UI based on the "Shlumzi" futuristic aesthetic.
+- **Orbital Background**: Added glowing, concentric radial background patterns to the dashboard.
+- **"Eye of Shlumzi" Orb**: Redesigned recording orb with concentric glowing rings and a central white "eye".
+- **Amber Palette**: Transitioned from Cyber Lime to a high-contrast deep Amber/Orange glow.
+- **Premium Glassmorphism**: Sharpened panels with improved backdrop filters and glowing borders.
+
 ### Version 3.3.0 - "The Persistent Release"
 - **Integrated Settings**: Settings moved from a popup window to a dedicated dashboard page.
 - **Pinning System**: History items and clipboards can now be pinned to stay forever.
