@@ -16,6 +16,9 @@ from gi.repository import Gtk, Adw, GLib, Gio, Gdk, GdkPixbuf, GObject
 # For Global Hotkey and Auto-Paste
 from pynput import keyboard
 
+# No Tray for now to ensure stability
+HAS_TRAY = False
+
 # Robust pathing for installation
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 STYLE_FILE = os.path.join(SCRIPT_DIR, "style.css")
@@ -40,6 +43,7 @@ class RecordingOverlay(Gtk.Window):
         print(f"DEBUG: Initializing RecordingOverlay with path: {image_path}")
         
         # Internal state for manual GIF playback
+        self.image_path = image_path
         self.anim_iter = None
         self.timeout_id = None
         
@@ -136,11 +140,12 @@ class RecordingOverlay(Gtk.Window):
         self.anim_iter = None
 
     def show_overlay(self):
+        self.load_image(self.image_path)
         self.present()
 
     def close_overlay(self):
-        self.stop_animation()
         self.set_visible(False)
+        self.stop_animation()
 
 class DictatorApp(Adw.Application):
     def __init__(self):
@@ -156,6 +161,13 @@ class DictatorApp(Adw.Application):
         print("DEBUG: Application started (do_startup)")
         # Prune history every 5 minutes
         GLib.timeout_add_seconds(300, self.prune_history)
+        
+        if HAS_TRAY:
+            self.setup_tray()
+
+    def setup_tray(self):
+        # Removed due to GTK version conflicts
+        pass
 
     def do_activate(self):
         print("DEBUG: Application activating (do_activate)")
@@ -312,28 +324,37 @@ class DictatorApp(Adw.Application):
 
 class DictatorWindow(Adw.ApplicationWindow):
     def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        self.app = kwargs["application"]
-        
-        self.set_title("Dictator")
-        self.set_default_size(800, 600)
-        
-        # Ensure window close quits the app
-        self.connect("close-request", self.on_close_request)
-        self.add_css_class("futuristic-window")
-
-        # State
-        self.recording = False
-        self.audio_queue = queue.Queue()
-        self.model = None
-        self.current_transcript = ""
-        self.keyboard_controller = keyboard.Controller()
-        self.overlay = None
-        
-        self.setup_ui()
-        self.refresh_history_ui()
-        self.apply_css()
-        self.update_hotkey()
+        try:
+            super().__init__(**kwargs)
+            self.app = kwargs["application"]
+            
+            self.set_title("Dictator")
+            self.set_default_size(800, 600)
+            
+            # Ensure window close quits the app
+            self.connect("close-request", self.on_close_request)
+            
+            # Monitor for minimize state
+            self.connect("notify::is-active", self.on_window_state_event)
+            self.add_css_class("futuristic-window")
+    
+            # State
+            self.recording = False
+            self.audio_queue = queue.Queue()
+            self.model = None
+            self.current_transcript = ""
+            self.keyboard_controller = keyboard.Controller()
+            self.overlay = None
+            
+            self.setup_ui()
+            self.refresh_history_ui()
+            self.apply_css()
+            self.update_hotkey()
+        except Exception as e:
+            print(f"DEBUG: Error in DictatorWindow.__init__: {e}")
+            import traceback
+            traceback.print_exc()
+            raise e
 
     # Settings Handlers
     def on_hotkey_changed(self, row):
@@ -395,9 +416,15 @@ class DictatorWindow(Adw.ApplicationWindow):
         except Exception as e:
             print(f"DEBUG: Error selecting overlay: {e}")
 
+    def on_window_state_event(self, window, pspec):
+        # We check if the window is being minimized
+        # GTK4 doesn't have a direct 'minimize' signal, but we can check the state
+        # In LibAdwaita, we often minimize to hide if a tray is present
+        pass
+
     def on_close_request(self, window):
         self.app.quit()
-        return True # Stop other handlers
+        return True 
 
     def apply_css(self):
         css_provider = Gtk.CssProvider()
@@ -412,16 +439,23 @@ class DictatorWindow(Adw.ApplicationWindow):
         except: pass
 
     def setup_ui(self):
-        # Use Adw.ToolbarView for proper window integration
-        content = Adw.ToolbarView()
-        self.set_content(content)
-
-        # Header with navigation
-        header = Adw.HeaderBar()
-        content.add_top_bar(header)
-        
-        self.view_stack = Adw.ViewStack()
-        content.set_content(self.view_stack)
+        # Use Adw.ToolbarView if available, else fallback to Gtk.Box
+        try:
+            content = Adw.ToolbarView()
+            self.set_content(content)
+            header = Adw.HeaderBar()
+            content.add_top_bar(header)
+            self.view_stack = Adw.ViewStack()
+            content.set_content(self.view_stack)
+        except (AttributeError, TypeError):
+            print("DEBUG: Adw.ToolbarView not available, using fallback layout")
+            main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+            self.set_content(main_box)
+            header = Adw.HeaderBar()
+            main_box.append(header)
+            self.view_stack = Adw.ViewStack()
+            self.view_stack.set_vexpand(True)
+            main_box.append(self.view_stack)
 
         view_switcher = Adw.ViewSwitcher()
         view_switcher.set_stack(self.view_stack)
@@ -429,7 +463,7 @@ class DictatorWindow(Adw.ApplicationWindow):
 
         # Explicit Exit Button
         exit_btn = Gtk.Button(icon_name="system-shutdown-symbolic")
-        exit_btn.set_tooltip_text("Exit Application")
+        exit_btn.set_tooltip_text("End Process Completely")
         exit_btn.add_css_class("flat")
         exit_btn.connect("clicked", lambda x: self.app.quit())
         header.pack_end(exit_btn)
