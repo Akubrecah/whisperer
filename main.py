@@ -437,12 +437,36 @@ class DictatorWindow(Adw.ApplicationWindow):
         settings_btn.connect("clicked", self.on_preferences_clicked)
         header.pack_end(settings_btn)
 
-        main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=20)
+        main_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=20)
         main_box.set_margin_top(30)
         main_box.set_margin_bottom(30)
         main_box.set_margin_start(30)
         main_box.set_margin_end(30)
         view_stack.set_content(main_box)
+
+        # Left Column: Orb and Text
+        left_col = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=20)
+        left_col.set_hexpand(True)
+        main_box.append(left_col)
+
+        # Right Column: Dashboard Clipboards
+        right_col = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        right_col.set_size_request(280, -1)
+        right_col.add_css_class("glass-view")
+        right_col.set_margin_start(10)
+        
+        clip_label = Gtk.Label(label="📋 RECENT CLIPBOARDS")
+        clip_label.add_css_class("caption")
+        clip_label.set_margin_top(10)
+        right_col.append(clip_label)
+
+        self.dashboard_clipboard_list = Gtk.ListBox()
+        self.dashboard_clipboard_list.set_selection_mode(Gtk.SelectionMode.NONE)
+        dash_clip_scroll = Gtk.ScrolledWindow()
+        dash_clip_scroll.set_vexpand(True)
+        dash_clip_scroll.set_child(self.dashboard_clipboard_list)
+        right_col.append(dash_clip_scroll)
+        main_box.append(right_col)
 
         # Visual Orb
         self.orb_btn = Gtk.Button()
@@ -455,7 +479,7 @@ class DictatorWindow(Adw.ApplicationWindow):
         self.orb_label = Gtk.Label(label="READY")
         self.orb_label.add_css_class("status-caption")
         overlay.add_overlay(self.orb_label)
-        main_box.append(overlay)
+        left_col.append(overlay)
 
         # Text area
         scrolled = Gtk.ScrolledWindow()
@@ -465,11 +489,11 @@ class DictatorWindow(Adw.ApplicationWindow):
         self.text_view.set_editable(False)
         self.text_view.set_wrap_mode(Gtk.WrapMode.WORD)
         scrolled.set_child(self.text_view)
-        main_box.append(scrolled)
+        left_col.append(scrolled)
 
         self.status_label = Gtk.Label(label="Initializing neural systems...")
         self.status_label.add_css_class("caption")
-        main_box.append(self.status_label)
+        left_col.append(self.status_label)
 
     def refresh_history_ui(self):
         # Refresh transcripts
@@ -486,16 +510,18 @@ class DictatorWindow(Adw.ApplicationWindow):
                 row.append(label); row.append(copy_btn); self.history_list.append(row)
 
         # Refresh clipboards
-        while (child := self.clipboard_list.get_first_child()): self.clipboard_list.remove(child)
-        if not self.app.clipboards: self.clipboard_list.append(Gtk.Label(label="Clipboard history is empty"))
-        else:
-            for item in self.app.clipboards:
-                row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
-                label = Gtk.Label(label=item[:40] + ("..." if len(item) > 40 else ""))
-                label.set_hexpand(True); label.set_halign(Gtk.Align.START)
-                copy_btn = Gtk.Button(icon_name="edit-copy-symbolic")
-                copy_btn.connect("clicked", lambda b, t=item: self.copy_text_to_clipboard(t))
-                row.append(label); row.append(copy_btn); self.clipboard_list.append(row)
+        for lb in [self.clipboard_list, self.dashboard_clipboard_list]:
+            while (child := lb.get_first_child()): lb.remove(child)
+            if not self.app.clipboards:
+                lb.append(Gtk.Label(label="Clipboard history is empty"))
+            else:
+                for item in self.app.clipboards:
+                    row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+                    label = Gtk.Label(label=item[:40] + ("..." if len(item) > 40 else ""))
+                    label.set_hexpand(True); label.set_halign(Gtk.Align.START)
+                    copy_btn = Gtk.Button(icon_name="edit-copy-symbolic")
+                    copy_btn.connect("clicked", lambda b, t=item: self.copy_text_to_clipboard(t))
+                    row.append(label); row.append(copy_btn); lb.append(row)
 
     def on_history_clicked(self, btn):
         self.refresh_history_ui()
@@ -557,27 +583,24 @@ class DictatorWindow(Adw.ApplicationWindow):
     def stop_live_session(self, auto_paste=False):
         if not self.recording: return
         self.recording = False
-        print("DEBUG: Stopping live session...")
+        print("DEBUG: Stopping live session (Key Released)")
         self.orb_btn.remove_css_class("recording")
         self.orb_label.set_label("READY")
         
         # Hide Overlay
         if self.overlay:
-            print("DEBUG: Hiding overlay")
             self.overlay.close_overlay()
-            # We don't destroy it to keep it fast for next time, but we might want to update image
-            # if settings changed. For now just hide.
         
         if hasattr(self, 'stream'):
             self.stream.stop()
             self.stream.close()
         
-        if self.current_transcript:
-            self.app.add_to_history(self.current_transcript)
-
+        # We handle history and pasting in wait_and_paste to ensure final buffer is used
         if auto_paste:
             threading.Thread(target=self.wait_and_paste, daemon=True).start()
         else:
+            if self.current_transcript:
+                self.app.add_to_history(self.current_transcript)
             self.status_label.set_label("Session finished.")
 
     def audio_callback(self, indata, frames, time, status):
@@ -611,8 +634,13 @@ class DictatorWindow(Adw.ApplicationWindow):
         return False
 
     def wait_and_paste(self):
-        time.sleep(0.4)
-        GLib.idle_add(self.perform_auto_paste)
+        # Wait for transcription worker to finish last chunk
+        time.sleep(0.6)
+        if self.current_transcript:
+            self.app.add_to_history(self.current_transcript)
+            GLib.idle_add(self.perform_auto_paste)
+        else:
+            GLib.idle_add(lambda: self.status_label.set_label("No text captured."))
 
     def perform_auto_paste(self):
         if not self.current_transcript: return False
