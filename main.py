@@ -406,21 +406,27 @@ class DictatorWindow(Adw.ApplicationWindow):
         except: pass
 
     def setup_ui(self):
-        # Use a main box to hold the header and the content
-        main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
-        self.set_content(main_box)
+        # Use Adw.ToolbarView for proper window integration
+        content = Adw.ToolbarView()
+        self.set_content(content)
 
         # Header with navigation
         header = Adw.HeaderBar()
-        main_box.append(header)
+        content.add_top_bar(header)
         
         self.view_stack = Adw.ViewStack()
-        self.view_stack.set_vexpand(True)
-        main_box.append(self.view_stack)
+        content.set_content(self.view_stack)
 
         view_switcher = Adw.ViewSwitcher()
         view_switcher.set_stack(self.view_stack)
         header.set_title_widget(view_switcher)
+
+        # Explicit Exit Button
+        exit_btn = Gtk.Button(icon_name="system-shutdown-symbolic")
+        exit_btn.set_tooltip_text("Exit Application")
+        exit_btn.add_css_class("flat")
+        exit_btn.connect("clicked", lambda x: self.app.quit())
+        header.pack_end(exit_btn)
 
         # 1. DASHBOARD PAGE
         self.dashboard_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=20)
