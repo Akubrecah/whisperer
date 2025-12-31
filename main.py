@@ -49,7 +49,6 @@ class RecordingOverlay(Gtk.Window):
         self.set_can_target(False)
         self.set_decorated(False)
         self.set_resizable(False)
-        self.set_keep_above(True)
         
         # Get monitor geometry for placement
         display = Gdk.Display.get_default()
