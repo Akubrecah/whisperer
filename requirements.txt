@@ -3,3 +3,4 @@ faster-whisper
 sounddevice
 numpy
 pyperclip
+pynput
