@@ -149,7 +149,7 @@ class DictatorWindow(Adw.ApplicationWindow):
         
         self.setup_ui()
         self.apply_css()
-        self.start_hotkey_listener()
+        self.update_hotkey()
 
     def apply_css(self):
         css_provider = Gtk.CssProvider()
