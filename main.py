@@ -421,7 +421,6 @@ class DictatorWindow(Adw.ApplicationWindow):
         self.set_titlebar(header)
         
         view_stack = Adw.ViewStack()
-        view_stack.set_transition_type(Adw.ViewStackTransitionType.SLIDE_LEFT_RIGHT)
         self.set_content(view_stack)
 
         view_switcher = Adw.ViewSwitcher()
