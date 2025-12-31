@@ -1,94 +1,110 @@
 :root {
-    --neon-accent: #39ff14; /* Cyber Lime default */
-    --glow-spread: 15px;
-    --glass-bg: rgba(30, 30, 30, 0.7);
+    --neon-accent: #ff7c00; /* Shlumzi Amber */
+    --neon-glow: rgba(255, 124, 0, 0.4);
+    --glow-spread: 25px;
+    --glass-bg: rgba(10, 10, 10, 0.85);
+    --panel-border: rgba(255, 124, 0, 0.15);
 }
 
 .futuristic-window {
-    background-color: #0b0b0b;
-    color: white;
+    background-color: #050505;
+    background-image: 
+        radial-gradient(circle at 50% 120%, rgba(255, 124, 0, 0.1) 0%, transparent 50%),
+        repeating-radial-gradient(circle at 50% 50%, transparent 0, transparent 40px, rgba(255, 124, 0, 0.03) 41px, transparent 42px);
+    color: #f0f0f0;
+}
+
+/* Orbital Rings Container */
+.orbital-container {
+    padding: 20px;
+    background: radial-gradient(circle at center, rgba(255, 124, 0, 0.05) 0%, transparent 70%);
 }
 
 .record-orb {
-    min-width: 120px;
-    min-height: 120px;
+    min-width: 140px;
+    min-height: 140px;
     border-radius: 50%;
-    background: radial-gradient(circle, var(--neon-accent) 0%, transparent 70%);
-    box-shadow: 0 0 var(--glow-spread) var(--neon-accent);
-    transition: all 0.3s ease;
-    border: 2px solid rgba(255, 255, 255, 0.1);
-    margin: 20px;
+    background: radial-gradient(circle at center, #fff 0%, #fff 10%, #ff7c00 20%, #000 60%);
+    border: 2px solid var(--neon-accent);
+    box-shadow: 
+        inset 0 0 30px var(--neon-glow),
+        0 0 var(--glow-spread) var(--neon-glow);
+    transition: all 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    margin: 40px;
 }
 
 .record-orb:hover {
-    box-shadow: 0 0 30px var(--neon-accent);
+    box-shadow: 
+        inset 0 0 30px var(--neon-glow),
+        0 0 50px var(--neon-accent);
     transform: scale(1.05);
 }
 
 .record-orb.recording {
-    background: radial-gradient(circle, #ff003c 0%, transparent 70%);
-    box-shadow: 0 0 40px #ff003c;
-    animation: pulse 1.5s infinite;
+    border-color: #ff003c;
+    box-shadow: 
+        inset 0 0 30px rgba(255, 0, 60, 0.4),
+        0 0 60px rgba(255, 0, 60, 0.6);
+    animation: shlumzi-pulse 2s infinite ease-in-out;
 }
 
-@keyframes pulse {
-    0% { transform: scale(1); box-shadow: 0 0 20px #ff003c; }
-    50% { transform: scale(1.1); box-shadow: 0 0 50px #ff003c; }
-    100% { transform: scale(1); box-shadow: 0 0 20px #ff003c; }
+@keyframes shlumzi-pulse {
+    0% { transform: scale(1); filter: brightness(1); }
+    50% { transform: scale(1.08); filter: brightness(1.3); }
+    100% { transform: scale(1); filter: brightness(1); }
 }
 
 .glass-view {
     background: var(--glass-bg);
-    border-radius: 12px;
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    padding: 15px;
+    backdrop-filter: blur(15px);
+    border-radius: 16px;
+    border: 1px solid var(--panel-border);
+    padding: 20px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.5);
     font-family: 'Space Mono', 'Monospace';
-    font-size: 1.1rem;
-    color: #e0e0e0;
 }
 
 .status-caption {
-    font-weight: bold;
-    letter-spacing: 1px;
+    font-weight: 600;
+    letter-spacing: 2px;
     text-transform: uppercase;
-    color: rgba(255, 255, 255, 0.6);
+    color: var(--neon-accent);
+    text-shadow: 0 0 10px var(--neon-glow);
 }
 
 headerbar {
-    background: transparent;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-}
-
-.overlay-window-transparent {
-    background: transparent;
-}
-
-.recording-overlay-content {
-    background: transparent;
-    border: none;
-    border-radius: 0;
-    padding: 0;
-    box-shadow: none;
-}
-
-.overlay-status-text {
-    opacity: 0; /* Hidden as per user request for only the gif */
-}
-
-.overlay-emoji {
-    font-size: 100px;
-    padding: 20px;
+    background: rgba(0,0,0,0.4);
+    border-bottom: 1px solid var(--panel-border);
+    padding: 10px;
 }
 
 .recording-gif-glow {
-    /* brightness(0) invert(1) turns any colored image into solid white */
-    filter: brightness(0) invert(1) drop-shadow(0 0 15px #ff003c);
-    animation: pulsing-glow-red 2s infinite ease-in-out;
+    filter: brightness(0) invert(1) sepia(100%) saturate(10000%) hue-rotate(5deg) drop-shadow(0 0 20px var(--neon-accent));
+    animation: pulsing-shlumzi 2.5s infinite ease-in-out;
 }
 
-@keyframes pulsing-glow-red {
-    0% { filter: brightness(0) invert(1) drop-shadow(0 0 10px #ff003c); transform: scale(1); }
-    50% { filter: brightness(0) invert(1) drop-shadow(0 0 25px #ff003c); transform: scale(1.02); }
-    100% { filter: brightness(0) invert(1) drop-shadow(0 0 10px #ff003c); transform: scale(1); }
+@keyframes pulsing-shlumzi {
+    0% { transform: scale(1); filter: brightness(0) invert(1) sepia(100%) saturate(10000%) hue-rotate(5deg) drop-shadow(0 0 10px var(--neon-accent)); }
+    50% { transform: scale(1.05); filter: brightness(0) invert(1) sepia(100%) saturate(10000%) hue-rotate(15deg) drop-shadow(0 0 30px var(--neon-accent)); }
+    100% { transform: scale(1); filter: brightness(0) invert(1) sepia(100%) saturate(10000%) hue-rotate(5deg) drop-shadow(0 0 10px var(--neon-accent)); }
+}
+
+/* Scrollbar Styling for Glass Views */
+scrolledwindow > viewport {
+    background: transparent;
+}
+
+listbox {
+    background: transparent;
+    color: #ccc;
+}
+
+row {
+    margin-bottom: 4px;
+    border-radius: 4px;
+}
+
+row:hover {
+    background: rgba(255, 124, 0, 0.1);
 }
 
