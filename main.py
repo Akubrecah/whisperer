@@ -32,10 +32,15 @@ DEFAULT_SETTINGS = {
 
 class DictatorApp(Adw.Application):
     def __init__(self):
-        super().__init__(application_id='com.example.Dictator',
+        super().__init__(application_id='com.akubrecah.Dictator',
                          flags=Gio.ApplicationFlags.FLAGS_NONE)
         self.settings = self.load_settings()
         self.history = self.load_history()
+        self.connect("activate", self.on_app_activate)
+
+    def on_app_activate(self, app):
+        self.window = DictatorWindow(application=self)
+        self.window.present()
 
     def load_settings(self):
         if os.path.exists(SETTINGS_FILE):
@@ -70,10 +75,6 @@ class DictatorApp(Adw.Application):
             return
         self.history.insert(0, text)
         self.save_history()
-
-    def do_activate(self):
-        self.window = DictatorWindow(application=self)
-        self.window.present()
 
 class PreferencesWindow(Adw.PreferencesWindow):
     def __init__(self, parent):
@@ -155,7 +156,6 @@ class DictatorWindow(Adw.ApplicationWindow):
         css_provider = Gtk.CssProvider()
         try:
             if not os.path.exists(STYLE_FILE):
-                print(f"CSS not found at {STYLE_FILE}")
                 return
             with open(STYLE_FILE, "r") as f:
                 css_data = f.read()
@@ -168,8 +168,8 @@ class DictatorWindow(Adw.ApplicationWindow):
                 css_provider,
                 Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
             )
-        except Exception as e:
-            print(f"CSS Error: {e}")
+        except:
+            pass
 
     def setup_ui(self):
         view_stack = Adw.ToolbarView()
@@ -239,7 +239,6 @@ class DictatorWindow(Adw.ApplicationWindow):
         main_box.append(self.status_label)
 
     def on_history_clicked(self, btn):
-        # Refresh history list
         while (child := self.history_list.get_first_child()):
             self.history_list.remove(child)
         
@@ -258,7 +257,6 @@ class DictatorWindow(Adw.ApplicationWindow):
                 row.append(label)
                 row.append(copy_btn)
                 self.history_list.append(row)
-        
         self.history_popover.popup()
 
     def copy_text_to_clipboard(self, text):
@@ -282,7 +280,8 @@ class DictatorWindow(Adw.ApplicationWindow):
                 self.trigger_key = keyboard.KeyCode.from_char(key_name)
             self.listener = keyboard.Listener(on_press=self.on_key_press, on_release=self.on_key_release)
             self.listener.start()
-        except: pass
+        except:
+            pass
 
     def on_key_press(self, key):
         if key == self.trigger_key and not self.recording:
@@ -320,7 +319,6 @@ class DictatorWindow(Adw.ApplicationWindow):
             self.stream.stop()
             self.stream.close()
         
-        # Add to history
         if self.current_transcript:
             self.app.add_to_history(self.current_transcript)
 
@@ -350,7 +348,8 @@ class DictatorWindow(Adw.ApplicationWindow):
                 text = " ".join([s.text for s in segments]).strip()
                 self.current_transcript = text
                 GLib.idle_add(self.update_ui, text)
-        except Exception as e: print(f"Error: {e}")
+        except:
+            pass
 
     def update_ui(self, text):
         if text:
@@ -365,15 +364,21 @@ class DictatorWindow(Adw.ApplicationWindow):
 
     def perform_auto_paste(self):
         if not self.current_transcript: return False
-        clipboard = self.get_display().get_clipboard()
-        clipboard.set(self.current_transcript)
-        time.sleep(0.1)
-        with self.keyboard_controller.pressed(keyboard.Key.ctrl):
-            self.keyboard_controller.press('v')
-            self.keyboard_controller.release('v')
-        self.status_label.set_label("DATA TRANSMITTED ⚡")
+        try:
+            clipboard = self.get_display().get_clipboard()
+            clipboard.set(self.current_transcript)
+            time.sleep(0.1)
+            with self.keyboard_controller.pressed(keyboard.Key.ctrl):
+                self.keyboard_controller.press('v')
+                self.keyboard_controller.release('v')
+            self.status_label.set_label("DATA TRANSMITTED ⚡")
+        except:
+            pass
         return False
 
 if __name__ == "__main__":
-    adw_app = DictatorApp()
-    adw_app.run(None)
+    try:
+        adw_app = DictatorApp()
+        adw_app.run(None)
+    except:
+        pass
