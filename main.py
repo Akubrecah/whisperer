@@ -318,6 +318,9 @@ class DictatorWindow(Adw.ApplicationWindow):
         
         self.set_title("Dictator")
         self.set_default_size(800, 600)
+        
+        # Ensure window close quits the app
+        self.connect("close-request", self.on_close_request)
         self.add_css_class("futuristic-window")
 
         # State
@@ -392,6 +395,10 @@ class DictatorWindow(Adw.ApplicationWindow):
                 print("DEBUG: Selection cancelled")
         except Exception as e:
             print(f"DEBUG: Error selecting overlay: {e}")
+
+    def on_close_request(self, window):
+        self.app.quit()
+        return True # Stop other handlers
 
     def apply_css(self):
         css_provider = Gtk.CssProvider()
