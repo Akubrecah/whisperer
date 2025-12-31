@@ -1,0 +1,5 @@
+PyGObject
+faster-whisper
+sounddevice
+numpy
+pyperclip
