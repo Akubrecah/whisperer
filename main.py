@@ -11,7 +11,7 @@ import gi
 # Ensure we use GTK4 and LibAdwaita
 gi.require_version('Gtk', '4.0')
 gi.require_version('Adw', '1')
-from gi.repository import Gtk, Adw, GLib, Gio, Gdk
+from gi.repository import Gtk, Adw, GLib, Gio, Gdk, GdkPixbuf
 
 # For Global Hotkey and Auto-Paste
 from pynput import keyboard
@@ -34,53 +34,124 @@ DEFAULT_SETTINGS = {
 }
 
 class RecordingOverlay(Gtk.Window):
-    def __init__(self, image_path):
-        super().__init__(title="Dictator Overlay")
-        self.set_default_size(300, 200)
-        self.set_decorated(False)
+    def __init__(self, application, image_path):
+        super().__init__(application=application)
+        self.set_title("Dictator Overlay")
+        print(f"DEBUG: Initializing RecordingOverlay with path: {image_path}")
+        
+        # Internal state for manual GIF playback
+        self.anim_iter = None
+        self.timeout_id = None
+        
+        # Make the window strictly non-focusable
         self.set_can_focus(False)
         self.set_focusable(False)
+        self.set_can_target(False)
+        self.set_decorated(False)
         self.set_resizable(False)
         
-        # GTK4 Window Hints for "Always on Top" and "Keep Above"
-        # Note: Desktop environments vary, but this is the standard approach
-        self.add_css_class("recording-overlay")
+        self.set_default_size(400, 600)
+        self.add_css_class("overlay-window-transparent")
         
-        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
-        box.set_halign(Gtk.Align.CENTER)
-        box.set_valign(Gtk.Align.CENTER)
-        self.set_child(box)
+        self.main_layout = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        self.main_layout.set_valign(Gtk.Align.END)
+        self.main_layout.set_halign(Gtk.Align.CENTER)
+        self.main_layout.set_margin_bottom(20)
+        self.set_child(self.main_layout)
         
-        if image_path and os.path.exists(image_path):
-            # For GIFs, Gtk.Image.new_from_file handles them automatically
-            img = Gtk.Image.new_from_file(image_path)
-            img.set_pixel_size(180)
-            box.append(img)
-        else:
-            lbl = Gtk.Label(label="🎙️")
-            lbl.add_css_class("overlay-emoji")
-            box.append(lbl)
+        self.content_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        self.content_box.add_css_class("recording-overlay-content")
+        self.main_layout.append(self.content_box)
+        
+        self.img = Gtk.Image()
+        self.img.set_pixel_size(200)
+        self.content_box.append(self.img)
+        
+        # We'll skip the status label as per user request for "only the gif"
+        # self.status_lbl = Gtk.Label(label="CAPTURE ACTIVE")
+        # self.status_lbl.add_css_class("overlay-status-text")
+        # self.content_box.append(self.status_lbl)
+        
+        self.load_image(image_path)
 
-    def show_overlay(self, transient_for=None):
-        if transient_for:
-            self.set_transient_for(transient_for)
-        # Ensure it appears on top
+    def load_image(self, image_path):
+        print(f"DEBUG: Loading overlay asset: {image_path}")
+        self.stop_animation()
+        
+        try:
+            if image_path and os.path.exists(image_path):
+                anim = GdkPixbuf.PixbufAnimation.new_from_file(image_path)
+                if anim.is_static_image():
+                    print("DEBUG: Static image detected.")
+                    self.img.set_from_file(image_path)
+                else:
+                    print("DEBUG: Animation detected. Starting manual crank.")
+                    self.anim_iter = anim.get_iter()
+                    self.start_animation()
+            else:
+                raise ValueError("Path invalid")
+        except Exception as e:
+            print(f"DEBUG: Error loading asset: {e}")
+            self.img.set_from_icon_name("audio-input-microphone-symbols")
+
+    def start_animation(self):
+        if not self.anim_iter: return
+        self.update_frame()
+
+    def update_frame(self):
+        if not self.anim_iter: return False
+        
+        pixbuf = self.anim_iter.get_pixbuf()
+        self.img.set_from_pixbuf(pixbuf)
+        
+        self.anim_iter.advance()
+        delay = self.anim_iter.get_delay_time()
+        if delay < 0: delay = 100
+        
+        self.timeout_id = GLib.timeout_add(delay, self.update_frame)
+        return False
+
+    def stop_animation(self):
+        if self.timeout_id:
+            GLib.source_remove(self.timeout_id)
+            self.timeout_id = None
+        self.anim_iter = None
+
+    def show_overlay(self):
         self.present()
+
+    def close_overlay(self):
+        self.stop_animation()
+        self.set_visible(False)
 
 class DictatorApp(Adw.Application):
     def __init__(self):
-        super().__init__(application_id='com.akubrecah.Dictator',
+        super().__init__(application_id='com.akubrecah.DictatorV2',
                          flags=Gio.ApplicationFlags.FLAGS_NONE)
+        print("DEBUG: DictatorApp __init__ V2")
         self.settings = self.load_settings()
         self.history = self.load_history()
         self.clipboards = self.load_clipboards()
-        self.connect("activate", self.on_app_activate)
 
-    def on_app_activate(self, app):
-        self.window = DictatorWindow(application=self)
-        self.window.present()
-        if self.settings["monitor_clipboard"]:
-            self.start_clipboard_monitor()
+    def do_startup(self):
+        # Startup logic goes here
+        Adw.Application.do_startup(self)
+        print("DEBUG: Application started (do_startup)")
+
+    def do_activate(self):
+        print("DEBUG: Application activating (do_activate)")
+        try:
+            if not hasattr(self, 'window') or self.window is None:
+                print("DEBUG: Instantiating DictatorWindow")
+                self.window = DictatorWindow(application=self)
+            print("DEBUG: Presenting DictatorWindow")
+            self.window.present()
+            if self.settings["monitor_clipboard"]:
+                self.start_clipboard_monitor()
+        except Exception as e:
+            print(f"DEBUG: Error in do_activate: {e}")
+            import traceback
+            traceback.print_exc()
 
     def load_settings(self):
         if os.path.exists(SETTINGS_FILE):
@@ -166,9 +237,9 @@ class DictatorApp(Adw.Application):
 class PreferencesWindow(Adw.PreferencesWindow):
     def __init__(self, parent):
         super().__init__(transient_for=parent)
+        print("DEBUG: PreferencesWindow __init__ V3")
         self.parent = parent
         self.app = parent.get_application()
-        
         page = Adw.PreferencesPage()
         self.add(page)
         
@@ -235,17 +306,39 @@ class PreferencesWindow(Adw.PreferencesWindow):
         self.app.save_settings()
 
     def on_overlay_pick_clicked(self, btn):
-        dialog = Gtk.FileDialog(title="Select Overlay Asset")
+        print("DEBUG: Overlay pick clicked")
+        dialog = Gtk.FileDialog(title="Select Recording Overlay (GIF/Image)")
+        
+        # Add file filters
+        filters = Gio.ListStore.new(Gtk.FileFilter)
+        
+        f_images = Gtk.FileFilter()
+        f_images.set_name("Image files")
+        f_images.add_mime_type("image/gif")
+        f_images.add_mime_type("image/png")
+        f_images.add_mime_type("image/jpeg")
+        filters.append(f_images)
+        
+        dialog.set_filters(filters)
         dialog.open(self, None, self.on_overlay_file_selected)
 
     def on_overlay_file_selected(self, dialog, result):
         try:
             file = dialog.open_finish(result)
             if file:
-                self.app.settings["overlay_image"] = file.get_path()
+                path = file.get_path()
+                print(f"DEBUG: File selected: {path}")
+                self.app.settings["overlay_image"] = path
                 self.app.save_settings()
-        except:
-            pass
+                
+                # IMPORTANT: Update the live overlay if it exists
+                if hasattr(self.parent, 'overlay') and self.parent.overlay:
+                    print("DEBUG: Updating active overlay instance image")
+                    self.parent.overlay.load_image(path)
+            else:
+                print("DEBUG: Selection cancelled")
+        except Exception as e:
+            print(f"DEBUG: File selection error: {e}")
 
 class DictatorWindow(Adw.ApplicationWindow):
     def __init__(self, **kwargs):
@@ -297,7 +390,10 @@ class DictatorWindow(Adw.ApplicationWindow):
         self.history_popover.set_parent(history_btn)
         
         popover_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
-        popover_box.set_margin_all(10)
+        popover_box.set_margin_top(10)
+        popover_box.set_margin_bottom(10)
+        popover_box.set_margin_start(10)
+        popover_box.set_margin_end(10)
         self.history_popover.set_child(popover_box)
         
         stack = Gtk.Stack()
@@ -326,7 +422,10 @@ class DictatorWindow(Adw.ApplicationWindow):
         header.pack_end(settings_btn)
 
         main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=20)
-        main_box.set_margin_all(30)
+        main_box.set_margin_top(30)
+        main_box.set_margin_bottom(30)
+        main_box.set_margin_start(30)
+        main_box.set_margin_end(30)
         view_stack.set_content(main_box)
 
         # Visual Orb
@@ -421,13 +520,15 @@ class DictatorWindow(Adw.ApplicationWindow):
     def start_live_session(self):
         if self.recording: return
         self.recording = True
+        print("DEBUG: Starting live session...")
         self.orb_btn.add_css_class("recording")
         self.orb_label.set_label("LISTENING")
         
         # Show Overlay
         if self.overlay is None:
-            self.overlay = RecordingOverlay(self.app.settings["overlay_image"])
-        self.overlay.show_overlay(transient_for=self)
+            print(f"DEBUG: Creating new RecordingOverlay instance. App settings path: {self.app.settings['overlay_image']}")
+            self.overlay = RecordingOverlay(self.app, self.app.settings["overlay_image"])
+        self.overlay.show_overlay()
         
         self.status_label.set_label("Capture in progress...")
         self.current_transcript = ""
@@ -440,12 +541,14 @@ class DictatorWindow(Adw.ApplicationWindow):
     def stop_live_session(self, auto_paste=False):
         if not self.recording: return
         self.recording = False
+        print("DEBUG: Stopping live session...")
         self.orb_btn.remove_css_class("recording")
         self.orb_label.set_label("READY")
         
         # Hide Overlay
         if self.overlay:
-            self.overlay.hide()
+            print("DEBUG: Hiding overlay")
+            self.overlay.close_overlay()
             # We don't destroy it to keep it fast for next time, but we might want to update image
             # if settings changed. For now just hide.
         
@@ -510,6 +613,11 @@ class DictatorWindow(Adw.ApplicationWindow):
 
 if __name__ == "__main__":
     try:
+        print("DEBUG: Application starting...")
         adw_app = DictatorApp()
-        adw_app.run(None)
-    except: pass
+        status = adw_app.run(None)
+        print(f"DEBUG: Application exited with status: {status}")
+    except Exception as e:
+        print(f"DEBUG: Critical error during execution: {e}")
+        import traceback
+        traceback.print_exc()
