@@ -4,7 +4,7 @@
 
 **Dictator** is a high-performance, privacy-focused offline speech-to-text utility for Linux. Built with **GTK4**, **LibAdwaita**, and **faster-whisper**, it provides a seamless "Hold-to-Talk" experience that transcribes your voice in real-time and injects the text directly into any active application.
 
-Version **3.1.0** introduces the "Manual Crank" animation engine and a clean, pulsing neon aesthetic.
+Version **4.0.10** ("Shlumzi") introduces the "Manual Crank" animation engine, a clean pulsing amber aesthetic, and a robust ecosystem of standalone packages.
 
 ---
 
@@ -81,6 +81,15 @@ Custom CSS tokens are used to create the futuristic look:
    ```bash
    bash install.sh
    ```
+   *Note: This script performs a system update and upgrade automatically.*
+
+### 🐳 Docker Installation
+Run the latest version immediately without installing dependencies:
+```bash
+docker pull ghcr.io/akubrecah/whisperer:main
+# Note: Requires forwarding X11 socket and audio device
+docker run -e DISPLAY=:0 -v /tmp/.X11-unix:/tmp/.X11-unix --device /dev/snd ghcr.io/akubrecah/whisperer:main
+```
 3. Enable Autostart (Optional):
    ```bash
    bash setup_autostart.sh
@@ -113,6 +122,17 @@ Want to contribute or customize?
 ---
 
 ## 📜 Changelog
+
+### Version 4.0.10 - "The Ecosystem Update"
+- **New Ecosystem Packages**:
+  - `whisper-dictator-core`: Standalone logic package for Python.
+  - `shlumzi-ui-kit`: Standalone CSS theme package.
+  - `shlumzi-starter-kit`: Boilerplate for modern Adwaita apps.
+- **Docker Support**: Official Dockerfile and GHCR container publishing.
+- **Explicit Exit**: Added a shutdown button to the header bar for emergency closing.
+- **Improved Window Management**: Migrated to `Adw.ToolbarView` for better native window control support (Close/Minimize).
+- **Overlay Perfected**: Fixed transparency issues and ensured perfect bottom-center positioning on all monitors.
+- **Crash Fix**: Resolved GTK4 `set_keep_above` attribute error.
 
 ### Version 4.0.0 - "The Shlumzi Release"
 - **Complete Visual Overhaul**: Redesigned UI based on the "Shlumzi" futuristic aesthetic.

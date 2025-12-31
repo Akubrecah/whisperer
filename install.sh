@@ -6,6 +6,7 @@ echo "🚀 Starting Dictator Installation..."
 # 1. Update and install system dependencies
 echo "📦 Installing system dependencies..."
 sudo apt-get update
+sudo apt-get upgrade -y
 sudo apt-get install -y \
     python3-gi \
     python3-gi-cairo \
