@@ -29,7 +29,7 @@ DEFAULT_SETTINGS = {
     "theme": "dark",
     "model": "tiny",
     "auto_paste": True,
-    "overlay_image": "/home/akubrecah/.gemini/antigravity/brain/2317293b-6c44-4905-8a5e-89676aff5eb2/uploaded_image_1767143279808.png",
+    "overlay_image": "/home/akubrecah/Desktop/tech-hub/whisperer/sound-8825_256.gif",
     "monitor_clipboard": True
 }
 
@@ -41,6 +41,9 @@ class RecordingOverlay(Gtk.Window):
         self.set_can_focus(False)
         self.set_focusable(False)
         self.set_resizable(False)
+        
+        # GTK4 Window Hints for "Always on Top" and "Keep Above"
+        # Note: Desktop environments vary, but this is the standard approach
         self.add_css_class("recording-overlay")
         
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
@@ -49,6 +52,7 @@ class RecordingOverlay(Gtk.Window):
         self.set_child(box)
         
         if image_path and os.path.exists(image_path):
+            # For GIFs, Gtk.Image.new_from_file handles them automatically
             img = Gtk.Image.new_from_file(image_path)
             img.set_pixel_size(180)
             box.append(img)
@@ -56,6 +60,12 @@ class RecordingOverlay(Gtk.Window):
             lbl = Gtk.Label(label="🎙️")
             lbl.add_css_class("overlay-emoji")
             box.append(lbl)
+
+    def show_overlay(self, transient_for=None):
+        if transient_for:
+            self.set_transient_for(transient_for)
+        # Ensure it appears on top
+        self.present()
 
 class DictatorApp(Adw.Application):
     def __init__(self):
@@ -417,7 +427,7 @@ class DictatorWindow(Adw.ApplicationWindow):
         # Show Overlay
         if self.overlay is None:
             self.overlay = RecordingOverlay(self.app.settings["overlay_image"])
-        self.overlay.present()
+        self.overlay.show_overlay(transient_for=self)
         
         self.status_label.set_label("Capture in progress...")
         self.current_transcript = ""
